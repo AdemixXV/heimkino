@@ -4,8 +4,6 @@
 export const CONFIG = {
   clientId: '5f381a7a-925b-4085-8dd3-847dcc39ba82', // App "Heimkino" im privaten Standardverzeichnis, nur persönliche Konten
   // Ordner in OneDrive, die als Bibliothek erscheinen (Pfad ab der obersten OneDrive-Ebene)
-  folders: [
-    { path: 'Filme/Handy', label: 'Filme' },
-    { path: 'Videos/Handy', label: 'Videos' },
-  ],
+  // (Videos/Handy bewusst nicht: private Handy-Aufnahmen gehören nicht in die App)
+  folders: [{ path: 'Filme/Handy', label: 'Filme' }],
 };
