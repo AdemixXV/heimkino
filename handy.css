@@ -64,7 +64,7 @@ main { padding-block: 0 var(--space-3xl); }
 .detail__art img { width: 100%; height: 100%; object-fit: cover; }
 .detail__art::after { content: ""; position: absolute; inset: 0; background: var(--hero-fade), var(--hero-side); }
 .detail__top { padding-block: var(--space-md) 0; }
-.detail__layout { display: grid; grid-template-columns: minmax(0, 14rem) minmax(0, 1fr); gap: var(--space-xl); align-items: end; padding-block-start: min(32svh, 14rem); }
+.detail__layout { display: grid; grid-template-columns: minmax(0, 14rem) minmax(0, 1fr); gap: var(--space-xl); align-items: start; padding-block-start: min(32svh, 14rem); }
 .detail__poster { aspect-ratio: 2 / 3; box-shadow: var(--shadow-card); }
 .detail__info { display: grid; gap: var(--space-md); min-width: 0; }
 .detail__info h1 { font-size: clamp(var(--text-2xl), 5vw, 3.2rem); max-width: 18ch; }
