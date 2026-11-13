@@ -111,15 +111,24 @@ export function buildLibrary(entries) {
     // Titel: Folge einer Serie, sonst Datei- oder Ordnername. Filmordner sind meist sauber geschrieben
     // ("Till.Death...2021"), die Datei darin oft klein oder ein Kürzel ("elc-spitgrave3"). Es gewinnt der Name
     // mit Jahreszahl und mehreren Wörtern, bei Gleichstand der Ordner.
-    let title = file.title;
+    let chosen = file;
     let episode = file.episode;
     if (file.episode === null && dirs.length > collectionDepth) {
       const folder = parseName(dirs.at(-1));
       const score = (p) => (p.year ? 2 : 0) + (/\s/.test(p.name) ? 1 : 0);
       if (folder.episode !== null) episode = folder.episode;
-      else if (score(folder) >= score(file)) title = folder.title;
+      else if (score(folder) >= score(file)) chosen = folder;
     }
-    if (episode !== null) title = `Folge ${episode}`;
+    const title = episode !== null ? `Folge ${episode}` : chosen.title;
+
+    // Schlüssel für die Filmdaten (Katalog): ein Film ist sein oberster Ordner (oder die Datei selbst),
+    // eine Serie ist der Ordner ihres Regals. Danach sucht das Laptop-Skript bei TMDB.
+    const isSeries = collectionDepth > 0;
+    const seriesFolder = isSeries ? parseName(dirs[collectionDepth - 1]) : null;
+    const metaKey = isSeries ? dirs.slice(0, collectionDepth).join('/') : entry.parts[0];
+    const query = isSeries
+      ? { kind: 'tv', name: seriesFolder.name, year: seriesFolder.year, season: seriesFolder.season ?? file.season ?? null }
+      : { kind: 'movie', name: chosen.name, year: chosen.year };
 
     return {
       id: entry.id,
@@ -127,6 +136,8 @@ export function buildLibrary(entries) {
       title,
       collection,
       episode,
+      metaKey: `${entry.rootIndex}|${metaKey}`,
+      query,
       rootIndex: entry.rootIndex,
       size: entry.size ?? 0,
       duration: entry.duration ?? null,

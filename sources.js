@@ -6,6 +6,7 @@ import { buildLibrary } from './titles.js';
 
 const GRAPH = 'https://graph.microsoft.com/v1.0';
 const VIDEO_FILE = /\.(mp4|m4v|mov|webm)$/i;
+const CATALOG_NAME = 'heimkino-katalog.json';
 
 export class SignInNeeded extends Error {}
 
@@ -93,6 +94,7 @@ export const oneDrive = {
     const limit = limiter(4);
     const entries = [];
     const missing = [];
+    const catalogs = [];
 
     async function walk(rootIndex, root, ref, parts) {
       let next = childrenUrl(ref);
@@ -101,6 +103,9 @@ export const oneDrive = {
         const folders = [];
         for (const item of page.value ?? []) {
           const target = targetOf(item, ref.driveId);
+          if (parts.length === 0 && item.file && item.name === CATALOG_NAME && item['@microsoft.graph.downloadUrl']) {
+            catalogs.push({ rootIndex, url: item['@microsoft.graph.downloadUrl'] });
+          }
           if (target.folder) folders.push({ name: item.name, ref: target });
           else if (item.file && VIDEO_FILE.test(item.name) && item.size > 0) { // 0 Byte: lädt gerade noch hoch
             const thumb = item.thumbnails?.[0];
@@ -131,7 +136,22 @@ export const oneDrive = {
         else await walk(rootIndex, root, ref, []);
       }),
     );
-    return { items: buildLibrary(entries), missing };
+
+    // Filmdaten (Poster, Beschreibung, Trailer ...), die das Laptop-Skript "film-infos" in den Ordner legt
+    const meta = {};
+    await Promise.all(
+      catalogs.map(async ({ rootIndex, url }) => {
+        try {
+          const res = await fetch(url);
+          if (!res.ok) return;
+          const data = await res.json();
+          for (const [key, value] of Object.entries(data.titles ?? {})) meta[`${rootIndex}|${key}`] = value;
+        } catch {
+          // ohne Filmdaten geht es auch, dann mit Vorschaubildern
+        }
+      }),
+    );
+    return { items: buildLibrary(entries), missing, meta };
   },
 
   // Kurzlebige, vorab freigegebene Adresse der Datei (gilt etwa eine Stunde). Nicht speichern, bei Bedarf neu holen.
@@ -155,7 +175,7 @@ export const demo = {
     const res = await fetch('/demo/library.json');
     if (!res.ok) throw new Error('Die Demo gibt es nur mit dem Testserver (npm run handy-app).');
     const data = await res.json();
-    return { items: buildLibrary(data.entries), missing: [] };
+    return { items: buildLibrary(data.entries), missing: [], meta: data.meta ?? {} };
   },
   async playUrl(video) {
     return `/demo/media/${encodeURIComponent(video.id)}`;

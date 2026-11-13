@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="color-scheme" content="dark">
   <meta name="theme-color" content="#0a1026">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; connect-src 'self' https://login.microsoftonline.com https://graph.microsoft.com; img-src 'self' data: https:; media-src 'self' https: blob:; base-uri 'none'; form-action 'self'; object-src 'none'">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; connect-src 'self' https://login.microsoftonline.com https://graph.microsoft.com https://*.microsoftpersonalcontent.com https://*.1drv.com https://*.livefilestore.com; img-src 'self' data: https:; media-src 'self' https: blob:; frame-src https://www.youtube-nocookie.com; base-uri 'none'; form-action 'self'; object-src 'none'">
   <meta name="referrer" content="no-referrer">
   <title>Heimkino</title>
   <meta name="description" content="Eigene Filme und Videos aus OneDrive im Streaming-Stil, auch unterwegs und ohne laufenden PC.">
@@ -14,7 +14,7 @@
   <link rel="apple-touch-icon" href="./icon-180.png">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-title" content="Heimkino">
-  <link rel="stylesheet" href="./style.css">
+  <link rel="stylesheet" href="./handy.css">
   <script type="module" src="./app.js"></script>
 </head>
 <body>
@@ -35,7 +35,7 @@
   </header>
 
   <main id="main" tabindex="-1">
-    <div class="container" id="view"></div>
+    <div id="view"></div>
   </main>
 
   <footer class="foot">
