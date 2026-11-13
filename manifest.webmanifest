@@ -1,0 +1,15 @@
+{
+  "name": "Heimkino",
+  "short_name": "Heimkino",
+  "description": "Eigene Filme und Videos aus OneDrive im Streaming-Stil",
+  "lang": "de",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#0a1026",
+  "theme_color": "#0a1026",
+  "icons": [
+    { "src": "./favicon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ]
+}

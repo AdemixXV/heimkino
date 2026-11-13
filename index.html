@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="dark">
+  <meta name="theme-color" content="#0a1026">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; connect-src 'self' https://login.microsoftonline.com https://graph.microsoft.com; img-src 'self' data: https:; media-src 'self' https: blob:; base-uri 'none'; form-action 'self'; object-src 'none'">
+  <meta name="referrer" content="no-referrer">
+  <title>Heimkino</title>
+  <meta name="description" content="Eigene Filme und Videos aus OneDrive im Streaming-Stil, auch unterwegs und ohne laufenden PC.">
+  <link rel="icon" href="./favicon.svg" type="image/svg+xml">
+  <link rel="manifest" href="./manifest.webmanifest">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Heimkino">
+  <link rel="stylesheet" href="./style.css">
+  <script type="module" src="./app.js"></script>
+</head>
+<body>
+  <a class="skip" href="#main">Zum Inhalt</a>
+
+  <header class="bar">
+    <div class="container bar__inner">
+      <a class="wordmark" href="#/" aria-label="Heimkino, zur Bibliothek">Heimkino</a>
+      <form class="search" role="search" id="search-form">
+        <label class="visually-hidden" for="search">Videos suchen</label>
+        <input class="input" id="search" name="q" type="search" placeholder="Titel suchen" autocomplete="off" enterkeyhint="search">
+      </form>
+      <button class="btn btn--quiet" type="button" id="rescan">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 4v7h-7"/></svg>
+        <span class="btn__label">Aktualisieren</span>
+      </button>
+    </div>
+  </header>
+
+  <main id="main" tabindex="-1">
+    <div class="container" id="view"></div>
+  </main>
+
+  <footer class="foot">
+    <div class="container foot__inner" id="foot"></div>
+  </footer>
+
+  <div id="live" class="visually-hidden" role="status" aria-live="polite"></div>
+
+  <noscript>
+    <div class="container"><p>Heimkino braucht JavaScript im Browser, um die Bibliothek und den Player anzuzeigen.</p></div>
+  </noscript>
+</body>
+</html>
