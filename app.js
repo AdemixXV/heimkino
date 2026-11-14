@@ -2,11 +2,11 @@
 // Detailseite mit Beschreibung, IMDb-Bewertung, FSK, Trailer, Besetzung und ähnlichen Filmen, Suche mit
 // Genres, Abspielen mit Weiterschauen. Alles kommt direkt aus OneDrive, die Filmdaten aus
 // "heimkino-katalog.json" (erzeugt auf dem Laptop von scripts/film-infos.js).
-import { AuthError, completeLogin, hasSession, isConfigured, login, logout } from './auth.js?v=2225caf8ba';
-import { announce, h } from './dom.js?v=2225caf8ba';
-import { NBSP, formatBytes, formatDuration, initialOf, resolutionLabel } from './format.js?v=2225caf8ba';
-import { SignInNeeded, demo, oneDrive } from './sources.js?v=2225caf8ba';
-import { allProgress, clearProgress, getProgress, isFinished, isResumable, saveProgress } from './store.js?v=2225caf8ba';
+import { AuthError, completeLogin, hasSession, isConfigured, login, logout } from './auth.js?v=d911149a9d';
+import { announce, h } from './dom.js?v=d911149a9d';
+import { NBSP, formatBytes, formatDuration, initialOf, resolutionLabel } from './format.js?v=d911149a9d';
+import { SignInNeeded, demo, oneDrive } from './sources.js?v=d911149a9d';
+import { allProgress, clearProgress, getProgress, isFinished, isResumable, saveProgress } from './store.js?v=d911149a9d';
 
 const view = document.getElementById('view');
 const tabLinks = [...document.querySelectorAll('.tabs__link')];
@@ -548,8 +548,7 @@ function renderProfile() {
         'profile__card',
       ),
       h('div', { class: 'actions' }, refreshButton, isDemo ? button('Demo beenden', endDemo, 'btn--quiet') : button('Abmelden', signOut, 'btn--quiet')),
-      h('p', { class: 'hint', text: 'Neue Filme erscheinen, sobald ihre Handy-Fassung in OneDrive liegt. Poster und Beschreibung kommen dazu, wenn auf dem Laptop „film-infos“ gelaufen ist.' }),
-      hasMeta && h('p', { class: 'credit', text: 'Filmdaten und Bilder von TMDB. Diese App nutzt die TMDB-API, ist aber nicht von TMDB unterstützt oder zertifiziert. Bewertungen von IMDb.' }),
+      hasMeta && h('p', { class: 'credit', text: 'Diese App nutzt die TMDB-API, ist aber nicht von TMDB unterstützt oder zertifiziert.' }),
     ),
   );
 }
@@ -697,7 +696,7 @@ async function renderTitle(key, token) {
           h('div', { class: 'actions' }, actions),
           meta.tagline && h('p', { class: 'detail__tagline', text: meta.tagline }),
           meta.overview && h('p', { class: 'detail__overview', text: meta.overview }),
-          !t.meta && h('p', { class: 'hint', text: 'Für diesen Titel gibt es noch keine Filmdaten. Sie kommen dazu, sobald auf dem Laptop „film-infos“ gelaufen ist.' }),
+          !t.meta && h('p', { class: 'hint', text: 'Poster und Beschreibung für diesen Titel kommen in Kürze von selbst dazu.' }),
         ),
       ),
       ...sections,

@@ -3,7 +3,7 @@
 // und tauscht ihn gegen Zugangsschlüssel. Kein Passwort berührt diese App.
 // Gelesen wird nur (Files.Read). Microsoft lässt Browser-Apps höchstens etwa 24 Stunden angemeldet,
 // danach genügt ein Tippen auf "Anmelden" (meist ohne Passwort, solange Microsoft dich im Browser kennt).
-import { CONFIG } from './config.js?v=2225caf8ba';
+import { CONFIG } from './config.js?v=d911149a9d';
 
 const AUTHORITY = 'https://login.microsoftonline.com/consumers/oauth2/v2.0';
 const SCOPES = 'openid profile offline_access User.Read Files.Read';

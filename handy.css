@@ -3,7 +3,7 @@
  * Baut auf style.css auf (Grundgerüst, Abstände, Zustände) und ersetzt dessen Farben und Schriften.
  * Schriften: nur was auf den Geräten schon da ist (schmale Grotesk für Überschriften, Schreibschrift fürs
  * Leuchtschild), es wird nichts nachgeladen. Poster behalten ihre eigenen Farben. */
-@import url("./style.css?v=2225caf8ba");
+@import url("./style.css?v=d911149a9d");
 
 :root {
   color-scheme: dark;
@@ -84,7 +84,7 @@ h1, h2, h3 { font-stretch: var(--display-stretch); }
 .rating span { color: var(--color-muted); font-weight: 400; }
 .actions { display: flex; flex-wrap: wrap; gap: var(--space-sm) var(--space-md); }
 .hint { color: var(--color-muted); }
-.credit { font-size: var(--text-xs); color: var(--color-muted); max-width: 60ch; }
+.credit { font-size: var(--text-xs); color: var(--color-muted); max-width: 60ch; opacity: 0.7; margin-top: var(--space-xl); }
 .notice { color: var(--color-ink-2); }
 
 .art { position: relative; overflow: hidden; background: var(--velvet-lo); color: var(--gold-mid); display: grid; place-items: center; }
@@ -97,7 +97,7 @@ h1, h2, h3 { font-stretch: var(--display-stretch); }
   position: relative;
   display: block;
   border: var(--frame-w) solid var(--gold-mid);
-  border-image: url("./frame.svg?v=2225caf8ba") 32 / var(--frame-w) round;
+  border-image: url("./frame.svg?v=d911149a9d") 32 / var(--frame-w) round;
   background: var(--velvet-lo);
   box-shadow: 0 var(--space-xs) var(--space-lg) calc(-1 * var(--space-2xs)) var(--shadow-deep);
 }
