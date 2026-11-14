@@ -2,14 +2,23 @@
 // Detailseite mit Beschreibung, IMDb-Bewertung, FSK, Trailer, Besetzung und ähnlichen Filmen, Suche mit
 // Genres, Abspielen mit Weiterschauen. Alles kommt direkt aus OneDrive, die Filmdaten aus
 // "heimkino-katalog.json" (erzeugt auf dem Laptop von scripts/film-infos.js).
-import { AuthError, completeLogin, hasSession, isConfigured, login, logout } from './auth.js?v=2cdcf3cf8d';
-import { announce, h } from './dom.js?v=2cdcf3cf8d';
-import { NBSP, formatBytes, formatDuration, initialOf, resolutionLabel } from './format.js?v=2cdcf3cf8d';
-import { SignInNeeded, demo, oneDrive } from './sources.js?v=2cdcf3cf8d';
-import { allProgress, clearProgress, getProgress, isFinished, isResumable, saveProgress } from './store.js?v=2cdcf3cf8d';
+import { AuthError, completeLogin, hasSession, isConfigured, login, logout } from './auth.js?v=0b72f32700';
+import { announce, h } from './dom.js?v=0b72f32700';
+import { NBSP, formatBytes, formatDuration, initialOf, resolutionLabel } from './format.js?v=0b72f32700';
+import { SignInNeeded, demo, oneDrive } from './sources.js?v=0b72f32700';
+import { allProgress, clearProgress, getProgress, isFinished, isResumable, saveProgress } from './store.js?v=0b72f32700';
 
 const view = document.getElementById('view');
 const tabLinks = [...document.querySelectorAll('.tabs__link')];
+
+// Vorspann (Vorhang auf): läuft von selbst ab, ein Tippen überspringt ihn
+const intro = document.querySelector('.intro');
+if (intro) {
+  intro.addEventListener('animationend', (event) => {
+    if (event.target === intro) intro.remove();
+  });
+  intro.addEventListener('click', () => intro.remove());
+}
 
 const MODE_KEY = 'heimkino-handy:v1:mode';
 const CACHE_KEY = 'heimkino-handy:v2:library';

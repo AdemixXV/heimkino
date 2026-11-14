@@ -9,15 +9,23 @@
   <meta name="referrer" content="no-referrer">
   <title>Heimkino</title>
   <meta name="description" content="Eigene Filme und Videos aus OneDrive im Streaming-Stil, auch unterwegs und ohne laufenden PC.">
-  <link rel="icon" href="./favicon.svg" type="image/svg+xml">
+  <link rel="icon" href="./icon.svg" type="image/svg+xml">
   <link rel="manifest" href="./manifest.webmanifest">
   <link rel="apple-touch-icon" href="./icon-180.png">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-title" content="Heimkino">
-  <link rel="stylesheet" href="./handy.css?v=2cdcf3cf8d">
-  <script type="module" src="./app.js?v=2cdcf3cf8d"></script>
+  <link rel="stylesheet" href="./handy.css?v=0b72f32700">
+  <script type="module" src="./app.js?v=0b72f32700"></script>
 </head>
 <body>
+  <!-- Vorspann beim Start: Leuchtschild geht an, dann öffnet sich der Vorhang. Reines CSS, verschwindet von selbst. -->
+  <div class="intro" aria-hidden="true">
+    <div class="intro__curtain intro__curtain--left"></div>
+    <div class="intro__curtain intro__curtain--right"></div>
+    <div class="valance intro__valance"></div>
+    <div class="sign intro__sign"><span class="sign__neon">Heimkino</span></div>
+  </div>
+
   <a class="skip" href="#main">Zum Inhalt</a>
 
   <main id="main" tabindex="-1">
