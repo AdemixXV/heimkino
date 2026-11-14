@@ -2,11 +2,11 @@
 // Detailseite mit Beschreibung, IMDb-Bewertung, FSK, Trailer, Besetzung und ähnlichen Filmen, Suche mit
 // Genres, Abspielen mit Weiterschauen. Alles kommt direkt aus OneDrive, die Filmdaten aus
 // "heimkino-katalog.json" (erzeugt auf dem Laptop von scripts/film-infos.js).
-import { AuthError, completeLogin, hasSession, isConfigured, login, logout } from './auth.js?v=84665bdeb8';
-import { announce, h } from './dom.js?v=84665bdeb8';
-import { NBSP, formatBytes, formatDuration, initialOf, resolutionLabel } from './format.js?v=84665bdeb8';
-import { SignInNeeded, demo, oneDrive } from './sources.js?v=84665bdeb8';
-import { allProgress, clearProgress, getProgress, isFinished, isResumable, saveProgress } from './store.js?v=84665bdeb8';
+import { AuthError, completeLogin, hasSession, isConfigured, login, logout } from './auth.js?v=2225caf8ba';
+import { announce, h } from './dom.js?v=2225caf8ba';
+import { NBSP, formatBytes, formatDuration, initialOf, resolutionLabel } from './format.js?v=2225caf8ba';
+import { SignInNeeded, demo, oneDrive } from './sources.js?v=2225caf8ba';
+import { allProgress, clearProgress, getProgress, isFinished, isResumable, saveProgress } from './store.js?v=2225caf8ba';
 
 const view = document.getElementById('view');
 const tabLinks = [...document.querySelectorAll('.tabs__link')];
@@ -679,7 +679,7 @@ async function renderTitle(key, token) {
     h(
       'article',
       { class: 'detail' },
-      h('div', { class: 'container detail__top' }, h('a', { class: 'btn btn--text back', href: state.listHash, text: state.listHash.startsWith('#/suchen') ? 'Zur Suche' : 'Zur Startseite' })),
+      h('div', { class: 'container detail__top' }, h('a', { class: 'btn btn--small btn--quiet back', href: state.listHash, text: state.listHash.startsWith('#/suchen') ? 'Zur Suche' : 'Zur Startseite' })),
       h(
         'header',
         { class: 'container detail__head' },
@@ -770,7 +770,7 @@ async function renderWatch(id, token) {
         h(
           'div',
           { class: 'player__bar' },
-          h('a', { class: 'btn btn--text back', href: t ? titleHash(t.key) : '#/', text: t?.kind === 'tv' ? `Zurück zu ${name}` : 'Zurück' }),
+          h('a', { class: 'btn btn--small btn--quiet back', href: t ? titleHash(t.key) : '#/', text: 'Zurück' }),
           h(
             'div',
             { class: 'actions' },
@@ -824,7 +824,7 @@ async function mountVideo(ctx, { resumeAt = null, autoplay = false } = {}) {
     if (!ctx.resumed && isResumable(saved) && saved.t < video.duration - 15) {
       ctx.resumed = true;
       video.currentTime = saved.t;
-      ctx.notice.replaceChildren(button('Von Anfang', () => { video.currentTime = 0; clearProgress(item.id); ctx.notice.replaceChildren(); }, 'btn--text'));
+      ctx.notice.replaceChildren(button('Von Anfang', () => { video.currentTime = 0; clearProgress(item.id); ctx.notice.replaceChildren(); }, 'btn--small btn--quiet'));
     }
   });
   video.addEventListener('timeupdate', () => {
