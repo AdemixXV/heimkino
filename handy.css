@@ -3,7 +3,7 @@
  * Baut auf style.css auf (Grundgerüst, Abstände, Zustände) und ersetzt dessen Farben und Schriften.
  * Schriften: nur was auf den Geräten schon da ist (schmale Grotesk für Überschriften, Schreibschrift fürs
  * Leuchtschild), es wird nichts nachgeladen. Poster behalten ihre eigenen Farben. */
-@import url("./style.css?v=5f646a95a2");
+@import url("./style.css?v=ae7d3a2220");
 
 :root {
   color-scheme: dark;
@@ -97,7 +97,7 @@ h1, h2, h3 { font-stretch: var(--display-stretch); }
   position: relative;
   display: block;
   border: var(--frame-w) solid var(--gold-mid);
-  border-image: url("./frame.svg?v=5f646a95a2") 32 / var(--frame-w) round;
+  border-image: url("./frame.svg?v=ae7d3a2220") 32 / var(--frame-w) round;
   background: var(--velvet-lo);
   box-shadow: 0 var(--space-xs) var(--space-lg) calc(-1 * var(--space-2xs)) var(--shadow-deep);
 }
@@ -349,6 +349,20 @@ h1, h2, h3 { font-stretch: var(--display-stretch); }
 .player__title { font-size: clamp(var(--text-2xl), 6vw, var(--text-3xl)); color: var(--gold-hi); max-width: none; text-shadow: 0 2px 0 var(--gold-deep), 0 0 14px var(--bulb-halo); }
 .player__sub { color: var(--color-muted); margin-top: var(--space-2xs); }
 .player .notice { justify-content: center; }
+
+/* Bildqualität: 720p | HD, die aktive ist ein goldenes Schild */
+.quality { display: inline-flex; border: 1px solid var(--gold-mid); border-radius: var(--radius-pill); overflow: hidden; box-shadow: inset 0 0 0 1px var(--gold-deep), 0 var(--space-xs) var(--space-md) calc(-1 * var(--space-xs)) var(--shadow-deep); }
+.quality__opt {
+  min-height: 38px; min-width: 3.6rem; padding: 0 var(--space-md); border: 0;
+  background: color-mix(in oklab, var(--velvet-night) 55%, transparent); color: var(--gold);
+  font: 600 var(--text-md)/1 var(--font-display); font-stretch: var(--display-stretch); cursor: pointer;
+  transition: background-color var(--dur-short) var(--ease-out), color var(--dur-short) var(--ease-out);
+}
+.quality__opt + .quality__opt { border-left: 1px solid var(--gold-deep); }
+.quality__opt[aria-pressed="true"] { background: linear-gradient(to bottom, var(--gold-hi), var(--gold) 40%, var(--gold-mid) 65%, var(--gold-lo)); color: var(--color-accent-ink); text-shadow: 0 1px 0 color-mix(in oklab, var(--gold-hi) 70%, transparent); cursor: default; }
+@media (hover: hover) { .quality__opt[aria-pressed="false"]:hover { background: color-mix(in oklab, var(--velvet) 80%, transparent); } }
+.quality__opt:active { transform: translateY(1px); }
+.quality__opt:focus-visible { outline: 2px solid var(--color-focus); outline-offset: -4px; }
 
 /* Popcorn-Tüte: steht unten vor einem, der untere Teil verschwindet hinter der Leiste */
 [data-view="watch"] main { padding-bottom: calc(var(--tabs-height) + env(safe-area-inset-bottom)); }

@@ -2,11 +2,11 @@
 // Detailseite mit Beschreibung, IMDb-Bewertung, FSK, Trailer, Besetzung und ähnlichen Filmen, Suche mit
 // Genres, Abspielen mit Weiterschauen. Alles kommt direkt aus OneDrive, die Filmdaten aus
 // "heimkino-katalog.json" (erzeugt auf dem Laptop von scripts/film-infos.js).
-import { AuthError, completeLogin, hasSession, isConfigured, login, logout } from './auth.js?v=5f646a95a2';
-import { announce, h } from './dom.js?v=5f646a95a2';
-import { NBSP, formatBytes, formatDuration, initialOf, resolutionLabel } from './format.js?v=5f646a95a2';
-import { SignInNeeded, demo, oneDrive } from './sources.js?v=5f646a95a2';
-import { allProgress, clearProgress, getProgress, isFinished, isResumable, saveProgress } from './store.js?v=5f646a95a2';
+import { AuthError, completeLogin, hasSession, isConfigured, login, logout } from './auth.js?v=ae7d3a2220';
+import { announce, h } from './dom.js?v=ae7d3a2220';
+import { NBSP, formatBytes, formatDuration, initialOf, resolutionLabel } from './format.js?v=ae7d3a2220';
+import { SignInNeeded, demo, oneDrive } from './sources.js?v=ae7d3a2220';
+import { allProgress, clearProgress, getProgress, isFinished, isResumable, saveProgress } from './store.js?v=ae7d3a2220';
 
 const view = document.getElementById('view');
 const tabLinks = [...document.querySelectorAll('.tabs__link')];
@@ -751,7 +751,14 @@ async function renderWatch(id, token) {
     if (v && v.currentTime > 0 && Number.isFinite(v.duration)) saveProgress(other.id, v.currentTime, v.duration);
     window.location.hash = watchHash(other.id);
   };
-  const sub = [t?.kind === 'tv' && episodeLabel(t, item), item.isHd && 'HD-Fassung'].filter(Boolean).join(', ');
+  const sub = t?.kind === 'tv' ? episodeLabel(t, item) : '';
+  // Umschalter mit beiden Möglichkeiten: die aktive ist golden, die andere wechselt
+  const quality = other && h(
+    'div',
+    { class: 'quality', role: 'group', 'aria-label': 'Bildqualität' },
+    h('button', { class: 'quality__opt', type: 'button', 'aria-pressed': String(!item.isHd), onclick: item.isHd ? switchTo : null, text: '720p' }),
+    h('button', { class: 'quality__opt', type: 'button', 'aria-pressed': String(Boolean(item.isHd)), onclick: item.isHd ? null : switchTo, text: 'HD' }),
+  );
 
   view.replaceChildren(
     h(
@@ -767,7 +774,7 @@ async function renderWatch(id, token) {
           h(
             'div',
             { class: 'actions' },
-            other && button(item.isHd ? 'In 720p' : 'In HD', switchTo, 'btn--small btn--quiet'),
+            quality,
             following && linkButton('Nächste Folge', watchHash(following.id), 'btn--small'),
           ),
         ),
