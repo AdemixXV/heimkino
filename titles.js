@@ -81,7 +81,21 @@ export function parseName(raw) {
 // entries: [{ id, rootIndex, rootLabel, parts: ['Ordner', ..., 'datei.mp4'], size, duration (Sekunden), width, height, thumb, modified }]
 // Ergebnis: Videos mit Titel und Regal. Ein Ordner mit mehreren Videos wird ein eigenes Regal (Serie, Urlaub),
 // ein Ordner mit nur einem Video ist ein Film: Dann ist der Ordnername meist der bessere Titel.
-export function buildLibrary(entries) {
+// HD-Fassungen liegen neben der normalen Handy-Fassung und heißen gleich, nur mit " (HD)" am Ende.
+const HD_MARK = /\s*\(HD\)(?=\.[^.]+$)/i;
+export const isHdName = (name) => HD_MARK.test(name);
+const pairKey = (entry) => `${entry.rootIndex}|${entry.parts.slice(0, -1).join('/')}|${entry.parts.at(-1).replace(HD_MARK, '').replace(/\.[^.]+$/, '').toLowerCase()}`;
+
+export function buildLibrary(allEntries) {
+  // HD-Fassungen mit passender normaler Fassung zählen nicht als eigenes Video, sie hängen an ihr (item.hd)
+  const plain = new Map(allEntries.filter((e) => !isHdName(e.parts.at(-1))).map((e) => [pairKey(e), e]));
+  const hdOf = new Map();
+  const entries = [];
+  for (const entry of allEntries) {
+    if (isHdName(entry.parts.at(-1)) && plain.has(pairKey(entry))) hdOf.set(plain.get(pairKey(entry)), entry);
+    else entries.push(entry);
+  }
+
   const counts = new Map(); // "Wurzel|Ordner/Unterordner" -> Zahl der Videos darunter
   for (const entry of entries) {
     const dirs = entry.parts.slice(0, -1);
@@ -146,6 +160,9 @@ export function buildLibrary(entries) {
       thumb: entry.thumb ?? null,
       modified: entry.modified ?? null,
       ext: 'MP4',
+      hd: hdOf.has(entry)
+        ? (({ id, driveId = null, size = 0, duration = null, width = null, height = null }) => ({ id, driveId, size, duration, width, height }))(hdOf.get(entry))
+        : null,
     };
   });
 

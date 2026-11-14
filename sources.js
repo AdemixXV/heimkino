@@ -1,8 +1,8 @@
 // Woher die Videos kommen: aus OneDrive (Microsoft Graph) oder, zum Ausprobieren, aus der Demo des Testservers.
 // Beide liefern dasselbe: eine Liste mit Einträgen für buildLibrary() und eine Abspieladresse pro Video.
-import { accessToken, AuthError } from './auth.js?v=142d64331f';
-import { CONFIG } from './config.js?v=142d64331f';
-import { buildLibrary } from './titles.js?v=142d64331f';
+import { accessToken, AuthError } from './auth.js?v=5f646a95a2';
+import { CONFIG } from './config.js?v=5f646a95a2';
+import { buildLibrary } from './titles.js?v=5f646a95a2';
 
 const GRAPH = 'https://graph.microsoft.com/v1.0';
 const VIDEO_FILE = /\.(mp4|m4v|mov|webm)$/i;

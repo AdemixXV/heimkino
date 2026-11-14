@@ -2,11 +2,11 @@
 // Detailseite mit Beschreibung, IMDb-Bewertung, FSK, Trailer, Besetzung und ähnlichen Filmen, Suche mit
 // Genres, Abspielen mit Weiterschauen. Alles kommt direkt aus OneDrive, die Filmdaten aus
 // "heimkino-katalog.json" (erzeugt auf dem Laptop von scripts/film-infos.js).
-import { AuthError, completeLogin, hasSession, isConfigured, login, logout } from './auth.js?v=142d64331f';
-import { announce, h } from './dom.js?v=142d64331f';
-import { NBSP, formatBytes, formatDuration, initialOf, resolutionLabel } from './format.js?v=142d64331f';
-import { SignInNeeded, demo, oneDrive } from './sources.js?v=142d64331f';
-import { allProgress, clearProgress, getProgress, isFinished, isResumable, saveProgress } from './store.js?v=142d64331f';
+import { AuthError, completeLogin, hasSession, isConfigured, login, logout } from './auth.js?v=5f646a95a2';
+import { announce, h } from './dom.js?v=5f646a95a2';
+import { NBSP, formatBytes, formatDuration, initialOf, resolutionLabel } from './format.js?v=5f646a95a2';
+import { SignInNeeded, demo, oneDrive } from './sources.js?v=5f646a95a2';
+import { allProgress, clearProgress, getProgress, isFinished, isResumable, saveProgress } from './store.js?v=5f646a95a2';
 
 const view = document.getElementById('view');
 const tabLinks = [...document.querySelectorAll('.tabs__link')];
@@ -136,7 +136,7 @@ function meter(progress) {
 const number = (value, digits = 1) => value.toLocaleString('de-DE', { minimumFractionDigits: digits, maximumFractionDigits: digits });
 
 function runtimeLabel(minutes) {
-  if (!minutes) return '';
+  if (!(minutes >= 0.5)) return '';
   const hours = Math.floor(minutes / 60);
   const rest = Math.round(minutes % 60);
   return hours > 0 ? `${hours}${NBSP}Std.${rest ? ` ${rest}${NBSP}Min.` : ''}` : `${rest}${NBSP}Min.`;
@@ -191,8 +191,12 @@ function episodeMeta(t, item) {
   return t.meta?.seasons?.[item.query?.season ?? 1]?.episodes?.[item.episode] ?? null;
 }
 
+// Jede HD-Fassung als eigenes abspielbares Video (eigener Fortschritt) mit den Angaben ihres Films
+const withHd = (items) => items.flatMap((i) => (i.hd ? [i, { ...i, ...i.hd, hd: null, isHd: true, base: i }] : [i]));
+const hdVersion = (item) => (item.hd ? { ...item, ...item.hd, hd: null, isHd: true, base: item } : null);
+
 function playLabel(t, item, progress) {
-  if (isResumable(progress)) return `Weiter ab ${formatDuration(progress.t)}`;
+  if (isResumable(progress)) return `Weiter ab ${formatDuration(progress.t)}${item.isHd ? ' in HD' : ''}`;
   if (t.kind === 'tv' && item.episode !== null) return `Folge ${item.episode} abspielen`;
   return 'Abspielen';
 }
@@ -206,7 +210,7 @@ function episodeLabel(t, item) {
 // Was "Abspielen" startet: angefangenes Video, sonst die erste nicht gesehene Folge, sonst das erste.
 function nextItemOf(t) {
   const progress = allProgress();
-  const started = t.items.filter((i) => isResumable(progress[i.id])).sort((a, b) => progress[b.id].at - progress[a.id].at)[0];
+  const started = withHd(t.items).filter((i) => isResumable(progress[i.id])).sort((a, b) => progress[b.id].at - progress[a.id].at)[0];
   if (started) return started;
   return t.items.find((i) => !isFinished(progress[i.id])) ?? t.items[0];
 }
@@ -359,7 +363,7 @@ function row(title, cards, { more = null } = {}) {
 // Der Titel auf der Bühne: zuletzt angefangen, sonst der neueste mit Poster
 function pickFeature() {
   const progress = allProgress();
-  const resumeItem = state.library.items.filter((i) => isResumable(progress[i.id])).sort((a, b) => progress[b.id].at - progress[a.id].at)[0];
+  const resumeItem = withHd(state.library.items).filter((i) => isResumable(progress[i.id])).sort((a, b) => progress[b.id].at - progress[a.id].at)[0];
   const resumeTitle = resumeItem && titleOfItem(resumeItem);
   if (resumeTitle?.meta?.poster) return resumeTitle;
   const withArt = state.titles.filter((t) => t.meta?.poster).sort((a, b) => b.added - a.added);
@@ -401,7 +405,7 @@ function renderLibrary() {
   }
 
   const progress = allProgress();
-  const watched = state.library.items.filter((i) => progress[i.id]).sort((a, b) => progress[b.id].at - progress[a.id].at);
+  const watched = withHd(state.library.items).filter((i) => progress[i.id]).sort((a, b) => progress[b.id].at - progress[a.id].at);
   const resumable = watched.filter((i) => isResumable(progress[i.id])).slice(0, 12);
   const lastSeen = watched[0] && titleOfItem(watched[0]);
   const because = lastSeen ? similarTo(lastSeen) : [];
@@ -596,6 +600,9 @@ async function renderTitle(key, token) {
 
   const actions = [linkButton(playLabel(t, next, progress), watchHash(next.id), 'btn--play', PLAY_ICON())];
   if (resumable) actions.push(button('Von vorn', () => { clearProgress(next.id); window.location.hash = watchHash(next.id); }, 'btn--quiet'));
+  // Zweite Fassung: HD, wenn es eine gibt, oder zurück zur normalen, wenn gerade die HD-Fassung läuft
+  if (next.isHd) actions.push(linkButton('In 720p abspielen', watchHash(next.base.id), 'btn--quiet'));
+  else if (next.hd) actions.push(linkButton('In HD abspielen', watchHash(next.hd.id), 'btn--quiet'));
   if (meta.trailer) actions.push(button('Trailer', () => openTrailer(t), 'btn--quiet'));
 
   const sections = [];
@@ -663,6 +670,7 @@ async function renderTitle(key, token) {
         ['Auflösung', resolutionLabel(file.width, file.height)],
         ['Größe', formatBytes(t.items.reduce((sum, i) => sum + (i.size ?? 0), 0))],
         ['Format', 'MP4, H.264 und AAC'],
+        ['HD-Fassung', file.hd ? [resolutionLabel(file.hd.width, file.hd.height), formatBytes(file.hd.size)].filter(Boolean).join(', ') : ''],
       ].filter(([, v]) => v).map(([label, value]) => h('div', {}, h('dt', { text: label }), h('dd', { text: value })))),
     ),
   );
@@ -726,7 +734,7 @@ function openTrailer(t) {
 
 async function renderWatch(id, token) {
   if (!(await ensureLibrary(token))) return;
-  const item = state.library.items.find((i) => i.id === id);
+  const item = withHd(state.library.items).find((i) => i.id === id);
   if (!item) {
     view.replaceChildren(stateBlock({ title: 'Dieses Video gibt es nicht mehr', text: 'Es wurde in OneDrive verschoben oder gelöscht.', actions: [linkButton('Zur Startseite', '#/')] }));
     return;
@@ -735,7 +743,15 @@ async function renderWatch(id, token) {
   const name = t?.name ?? item.title;
   document.title = `${name} | Heimkino`;
   const ctx = { item, t, video: null, media: h('div', { class: 'player__media' }), notice: h('p', { class: 'notice', 'aria-live': 'polite' }), resumed: false, retried: false, lastSave: 0, token };
-  const following = nextInList(t, item);
+  const following = nextInList(t, item.base ?? item);
+  // Umschalten zwischen HD und 720p: die andere Fassung startet an derselben Stelle
+  const other = item.isHd ? item.base : hdVersion(item);
+  const switchTo = () => {
+    const v = ctx.video;
+    if (v && v.currentTime > 0 && Number.isFinite(v.duration)) saveProgress(other.id, v.currentTime, v.duration);
+    window.location.hash = watchHash(other.id);
+  };
+  const sub = [t?.kind === 'tv' && episodeLabel(t, item), item.isHd && 'HD-Fassung'].filter(Boolean).join(', ');
 
   view.replaceChildren(
     h(
@@ -748,10 +764,15 @@ async function renderWatch(id, token) {
           'div',
           { class: 'player__bar' },
           h('a', { class: 'btn btn--text back', href: t ? titleHash(t.key) : '#/', text: t?.kind === 'tv' ? `Zurück zu ${name}` : 'Zurück' }),
-          following && linkButton('Nächste Folge', watchHash(following.id), 'btn--small'),
+          h(
+            'div',
+            { class: 'actions' },
+            other && button(item.isHd ? 'In 720p' : 'In HD', switchTo, 'btn--small btn--quiet'),
+            following && linkButton('Nächste Folge', watchHash(following.id), 'btn--small'),
+          ),
         ),
         framed(ctx.media, 'player__screen'),
-        h('div', { class: 'player__caption' }, h('h1', { class: 'player__title', text: name }), t?.kind === 'tv' && h('p', { class: 'player__sub', text: episodeLabel(t, item) })),
+        h('div', { class: 'player__caption' }, h('h1', { class: 'player__title', text: name }), sub && h('p', { class: 'player__sub', text: sub })),
         ctx.notice,
       ),
       popcornBucket(),
@@ -987,7 +1008,7 @@ function nextInList(t, item) {
 }
 
 function showNext(ctx) {
-  const next = nextInList(ctx.t, ctx.item);
+  const next = nextInList(ctx.t, ctx.item.base ?? ctx.item);
   if (!next) return;
   ctx.notice.replaceChildren(`Als Nächstes: ${episodeLabel(ctx.t, next)} `, button('Abspielen', () => { window.location.hash = watchHash(next.id); }));
 }
