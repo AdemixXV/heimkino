@@ -3,8 +3,8 @@
  * axes: dark/grotesk-sans/cool · posture: committed · contrast: pass · v2.0.0 */
 /* Hallmark · pre-emit critique: P4 H4 E4 S4 R4 V4 · weakest: S, the shelf could be any media app; led with the real chapter meter and the preparing state of the user's own files instead of a generic hero */
 /* Hallmark · answered covers keep their own colours · the covers are frames of the user's own videos, not decoration, so the theme's duotone is left off them */
-@import url("./tokens.css");
-@import url("./base.css");
+@import url("./tokens.css?v=2cdcf3cf8d");
+@import url("./base.css?v=2cdcf3cf8d");
 
 :root {
   --bar-height: 64px;

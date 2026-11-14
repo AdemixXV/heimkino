@@ -2,11 +2,11 @@
 // Detailseite mit Beschreibung, IMDb-Bewertung, FSK, Trailer, Besetzung und ähnlichen Filmen, Suche mit
 // Genres, Abspielen mit Weiterschauen. Alles kommt direkt aus OneDrive, die Filmdaten aus
 // "heimkino-katalog.json" (erzeugt auf dem Laptop von scripts/film-infos.js).
-import { AuthError, completeLogin, hasSession, isConfigured, login, logout } from './auth.js';
-import { announce, h } from './dom.js';
-import { NBSP, formatBytes, formatDuration, initialOf, resolutionLabel } from './format.js';
-import { SignInNeeded, demo, oneDrive } from './sources.js';
-import { allProgress, clearProgress, getProgress, isFinished, isResumable, saveProgress } from './store.js';
+import { AuthError, completeLogin, hasSession, isConfigured, login, logout } from './auth.js?v=2cdcf3cf8d';
+import { announce, h } from './dom.js?v=2cdcf3cf8d';
+import { NBSP, formatBytes, formatDuration, initialOf, resolutionLabel } from './format.js?v=2cdcf3cf8d';
+import { SignInNeeded, demo, oneDrive } from './sources.js?v=2cdcf3cf8d';
+import { allProgress, clearProgress, getProgress, isFinished, isResumable, saveProgress } from './store.js?v=2cdcf3cf8d';
 
 const view = document.getElementById('view');
 const tabLinks = [...document.querySelectorAll('.tabs__link')];
