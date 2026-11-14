@@ -2,11 +2,11 @@
 // Detailseite mit Beschreibung, IMDb-Bewertung, FSK, Trailer, Besetzung und ähnlichen Filmen, Suche mit
 // Genres, Abspielen mit Weiterschauen. Alles kommt direkt aus OneDrive, die Filmdaten aus
 // "heimkino-katalog.json" (erzeugt auf dem Laptop von scripts/film-infos.js).
-import { AuthError, completeLogin, hasSession, isConfigured, login, logout } from './auth.js?v=ae7d3a2220';
-import { announce, h } from './dom.js?v=ae7d3a2220';
-import { NBSP, formatBytes, formatDuration, initialOf, resolutionLabel } from './format.js?v=ae7d3a2220';
-import { SignInNeeded, demo, oneDrive } from './sources.js?v=ae7d3a2220';
-import { allProgress, clearProgress, getProgress, isFinished, isResumable, saveProgress } from './store.js?v=ae7d3a2220';
+import { AuthError, completeLogin, hasSession, isConfigured, login, logout } from './auth.js?v=84665bdeb8';
+import { announce, h } from './dom.js?v=84665bdeb8';
+import { NBSP, formatBytes, formatDuration, initialOf, resolutionLabel } from './format.js?v=84665bdeb8';
+import { SignInNeeded, demo, oneDrive } from './sources.js?v=84665bdeb8';
+import { allProgress, clearProgress, getProgress, isFinished, isResumable, saveProgress } from './store.js?v=84665bdeb8';
 
 const view = document.getElementById('view');
 const tabLinks = [...document.querySelectorAll('.tabs__link')];
@@ -599,7 +599,7 @@ async function renderTitle(key, token) {
   ].filter(Boolean);
 
   const actions = [linkButton(playLabel(t, next, progress), watchHash(next.id), 'btn--play', PLAY_ICON())];
-  if (resumable) actions.push(button('Von vorn', () => { clearProgress(next.id); window.location.hash = watchHash(next.id); }, 'btn--quiet'));
+  if (resumable) actions.push(button('Von Anfang', () => { clearProgress(next.id); window.location.hash = watchHash(next.id); }, 'btn--quiet'));
   // Zweite Fassung: HD, wenn es eine gibt, oder zurück zur normalen, wenn gerade die HD-Fassung läuft
   if (next.isHd) actions.push(linkButton('In 720p abspielen', watchHash(next.base.id), 'btn--quiet'));
   else if (next.hd) actions.push(linkButton('In HD abspielen', watchHash(next.hd.id), 'btn--quiet'));
@@ -824,7 +824,7 @@ async function mountVideo(ctx, { resumeAt = null, autoplay = false } = {}) {
     if (!ctx.resumed && isResumable(saved) && saved.t < video.duration - 15) {
       ctx.resumed = true;
       video.currentTime = saved.t;
-      ctx.notice.replaceChildren(`Weiter bei ${formatDuration(saved.t)}. `, button('Von vorn', () => { video.currentTime = 0; clearProgress(item.id); ctx.notice.replaceChildren(); }, 'btn--text'));
+      ctx.notice.replaceChildren(button('Von Anfang', () => { video.currentTime = 0; clearProgress(item.id); ctx.notice.replaceChildren(); }, 'btn--text'));
     }
   });
   video.addEventListener('timeupdate', () => {
