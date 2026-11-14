@@ -2,11 +2,11 @@
 // Detailseite mit Beschreibung, IMDb-Bewertung, FSK, Trailer, Besetzung und ähnlichen Filmen, Suche mit
 // Genres, Abspielen mit Weiterschauen. Alles kommt direkt aus OneDrive, die Filmdaten aus
 // "heimkino-katalog.json" (erzeugt auf dem Laptop von scripts/film-infos.js).
-import { AuthError, completeLogin, hasSession, isConfigured, login, logout } from './auth.js?v=f63500235f';
-import { announce, h } from './dom.js?v=f63500235f';
-import { NBSP, formatBytes, formatDuration, initialOf, resolutionLabel } from './format.js?v=f63500235f';
-import { SignInNeeded, demo, oneDrive } from './sources.js?v=f63500235f';
-import { allProgress, clearProgress, getProgress, isFinished, isResumable, saveProgress } from './store.js?v=f63500235f';
+import { AuthError, completeLogin, hasSession, isConfigured, login, logout } from './auth.js?v=142d64331f';
+import { announce, h } from './dom.js?v=142d64331f';
+import { NBSP, formatBytes, formatDuration, initialOf, resolutionLabel } from './format.js?v=142d64331f';
+import { SignInNeeded, demo, oneDrive } from './sources.js?v=142d64331f';
+import { allProgress, clearProgress, getProgress, isFinished, isResumable, saveProgress } from './store.js?v=142d64331f';
 
 const view = document.getElementById('view');
 const tabLinks = [...document.querySelectorAll('.tabs__link')];
@@ -844,8 +844,9 @@ function onVideoError(ctx) {
 }
 
 // ---------- Popcorn ----------
-// Die Tüte steht unten vor einem. Nach oben wischen: Sie ruckt kurz, und Popcorn fliegt heraus auf einen zu
-// (wird größer, dreht sich, steigt und fällt). Je schneller gewischt, desto mehr und desto weiter.
+// Die Tüte steht unten vor einem. Nach oben wischen: Sie ruckt kurz, und Popcorn fliegt im Bogen nach vorne
+// auf die Leinwand (wird dabei kleiner, weil es sich entfernt), prallt ab und rutscht daran herunter.
+// Ein paar Körner fallen zu kurz. Je schneller gewischt, desto mehr und desto schneller.
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 const KERNEL_FILLS = [
@@ -905,26 +906,44 @@ function throwPopcorn(img, power) {
   );
   navigator.vibrate?.(12);
 
+  // Ziel ist die Leinwand: das Bild im Goldrahmen
+  const screen = document.querySelector('.player__screen')?.getBoundingClientRect() ?? { left: box.left, top: 40, width: box.width, height: box.width * 0.56 };
+  const at = (x, y, rot, sx, sy = sx) => `translate(${x.toFixed(1)}px, ${y.toFixed(1)}px) translate(-50%, -50%) rotate(${rot.toFixed(0)}deg) scale(${sx.toFixed(3)}, ${sy.toFixed(3)})`;
+
   for (let i = 0; i < count; i += 1) {
     // Start: irgendwo auf dem Popcorn-Berg in der Öffnung der Tüte (im Foto bei 20 bis 36 % der Höhe)
     const x0 = box.left + box.width * rand(0.14, 0.86);
     const y0 = box.top + box.height * rand(0.2, 0.36);
-    const T = rand(1.0, 1.5); // Sekunden
-    const vy = -rand(430, 760) * power; // Wurfhöhe: etwa bis zum Titel, bei schnellem Wischen bis ins Bild
-    const vx = (x0 - centerX) * rand(1.2, 2.6) + rand(-150, 150);
-    const g = 1250;
-    const s0 = rand(0.75, 1.05);
-    const s1 = rand(2.4, 7) * (0.8 + 0.2 * power); // kommt auf einen zu und wird dabei groß
-    const spin = rand(-620, 620);
+    // Ziel: eine Stelle auf der Leinwand; etwa jedes siebte Korn fällt zu kurz und landet davor
+    const short = Math.random() < 0.15;
+    const tx = screen.left + screen.width * rand(0.1, 0.9) + (centerX - x0) * -0.15;
+    const ty = short ? screen.top + screen.height + rand(15, 80) : screen.top + screen.height * rand(0.1, 0.85);
+    const fly = rand(0.55, 0.85) / Math.sqrt(power); // Sekunden bis zum Aufprall
+    const squash = 0.06;
+    const slide = rand(0.45, 0.75); // Herunterrutschen und Verblassen
+    const total = fly + squash + slide;
+    const arc = rand(40, 140) * power; // Bogen über die gerade Linie hinaus
+    const s0 = rand(1.0, 1.3);
+    const s1 = short ? rand(0.5, 0.65) : rand(0.3, 0.45); // weiter weg, also kleiner
+    const spin = rand(-540, 540);
+    const drop = rand(40, 130);
+    const drift = rand(-14, 14);
     const frames = [];
-    for (let k = 0; k <= 16; k += 1) {
-      const p = k / 16;
-      const t = p * T;
-      const scale = s0 * (s1 / s0) ** (p ** 1.6);
-      const x = x0 + vx * t * (1 + 0.8 * p);
-      const y = y0 + vy * t + 0.5 * g * t * t;
-      frames.push({ transform: `translate(${x.toFixed(1)}px, ${y.toFixed(1)}px) translate(-50%, -50%) rotate(${(spin * p).toFixed(0)}deg) scale(${scale.toFixed(3)})`, opacity: p < 0.72 ? 1 : 1 - (p - 0.72) / 0.28, offset: p });
+    for (let k = 0; k <= 14; k += 1) {
+      const p = k / 14;
+      const x = x0 + (tx - x0) * p;
+      const y = y0 + (ty - y0) * p - arc * 4 * p * (1 - p);
+      const scale = s0 * (s1 / s0) ** (p ** 0.7);
+      frames.push({ transform: at(x, y, spin * p, scale), opacity: 1, offset: (p * fly) / total });
     }
+    // Aufprall: kurz platt gedrückt
+    frames.push({ transform: at(tx, ty, spin, s1 * 1.18, s1 * 0.78), opacity: 1, offset: (fly + squash) / total });
+    // an der Leinwand herunterrutschen und verblassen
+    for (let k = 1; k <= 8; k += 1) {
+      const q = k / 8;
+      frames.push({ transform: at(tx + drift * q, ty + drop * q * q, spin + 70 * q, s1 * (1 - 0.12 * q)), opacity: 1 - q ** 1.4, offset: Math.min(1, (fly + squash + q * slide) / total) });
+    }
+    const T = total;
     const kernel = h('div', { class: 'kernel' }, kernelShapes[Math.floor(Math.random() * kernelShapes.length)].cloneNode(true));
     layer.append(kernel);
     flying += 1;
