@@ -2,11 +2,11 @@
 // Detailseite mit Beschreibung, IMDb-Bewertung, FSK, Trailer, Besetzung und ähnlichen Filmen, Suche mit
 // Genres, Abspielen mit Weiterschauen. Alles kommt direkt aus OneDrive, die Filmdaten aus
 // "heimkino-katalog.json" (erzeugt auf dem Laptop von scripts/film-infos.js).
-import { AuthError, completeLogin, hasSession, isConfigured, login, logout } from './auth.js?v=f89de4593e';
-import { announce, h } from './dom.js?v=f89de4593e';
-import { NBSP, formatBytes, formatDuration, initialOf, resolutionLabel } from './format.js?v=f89de4593e';
-import { SignInNeeded, demo, oneDrive } from './sources.js?v=f89de4593e';
-import { allProgress, clearProgress, getProgress, isFinished, isResumable, saveProgress } from './store.js?v=f89de4593e';
+import { AuthError, completeLogin, hasSession, isConfigured, login, logout } from './auth.js?v=f63500235f';
+import { announce, h } from './dom.js?v=f63500235f';
+import { NBSP, formatBytes, formatDuration, initialOf, resolutionLabel } from './format.js?v=f63500235f';
+import { SignInNeeded, demo, oneDrive } from './sources.js?v=f63500235f';
+import { allProgress, clearProgress, getProgress, isFinished, isResumable, saveProgress } from './store.js?v=f63500235f';
 
 const view = document.getElementById('view');
 const tabLinks = [...document.querySelectorAll('.tabs__link')];
@@ -754,8 +754,7 @@ async function renderWatch(id, token) {
         h('div', { class: 'player__caption' }, h('h1', { class: 'player__title', text: name }), t?.kind === 'tv' && h('p', { class: 'player__sub', text: episodeLabel(t, item) })),
         ctx.notice,
       ),
-      // Popcorn-Tüte unten, als stünde sie vor einem (scripts/make-popcorn.js)
-      h('div', { class: 'popcorn', 'aria-hidden': 'true' }, h('img', { src: './popcorn.svg', alt: '', decoding: 'async' })),
+      popcornBucket(),
     ),
   );
   ctx.onKey = (event) => onKey(ctx, event);
@@ -842,6 +841,123 @@ function onVideoError(ctx) {
       actions: [button('Noch einmal versuchen', () => { ctx.retried = false; mountVideo(ctx, { resumeAt: position > 0 ? position : null, autoplay: true }); })],
     }),
   );
+}
+
+// ---------- Popcorn ----------
+// Die Tüte steht unten vor einem. Nach oben wischen: Sie ruckt kurz, und Popcorn fliegt heraus auf einen zu
+// (wird größer, dreht sich, steigt und fällt). Je schneller gewischt, desto mehr und desto weiter.
+
+const SVG_NS = 'http://www.w3.org/2000/svg';
+const KERNEL_FILLS = [
+  ['#fffef8', '#fbf1d6', '#ebd09a', '#b98b4a'],
+  ['#fffbea', '#f8e3a8', '#e3b862', '#a8752e'],
+  ['#fff6d2', '#f3d27a', '#d9a13f', '#93601f'],
+];
+let kernelShapes = null;
+let flying = 0;
+
+function svgEl(tag, attrs) {
+  const el = document.createElementNS(SVG_NS, tag);
+  for (const [k, v] of Object.entries(attrs)) el.setAttribute(k, String(v));
+  return el;
+}
+
+// Einmal: Farbverläufe für die Körner und acht verschiedene Kornformen aus mehreren Bäuschen
+function makeKernelShapes() {
+  const defs = svgEl('svg', { width: 0, height: 0, 'aria-hidden': 'true', style: 'position:absolute' });
+  const d = svgEl('defs', {});
+  KERNEL_FILLS.forEach((stops, i) => {
+    const g = svgEl('radialGradient', { id: `kernel-${i}`, cx: 0.36, cy: 0.32, r: 0.75 });
+    [0, 0.45, 0.8, 1].forEach((offset, j) => g.append(svgEl('stop', { offset, 'stop-color': stops[j] })));
+    d.append(g);
+  });
+  defs.append(d);
+  document.body.append(defs);
+  return Array.from({ length: 8 }, () => {
+    const svg = svgEl('svg', { viewBox: '-20 -20 40 40', 'aria-hidden': 'true' });
+    const fill = `url(#kernel-${Math.floor(Math.random() * KERNEL_FILLS.length)})`;
+    const n = 4 + Math.floor(Math.random() * 3);
+    const base = Math.random() * Math.PI * 2;
+    const puffs = Array.from({ length: n }, (_, i) => {
+      const a = base + (i * Math.PI * 2) / n + (Math.random() - 0.5) * 0.9;
+      const dist = 5 + Math.random() * 4;
+      return [Math.cos(a) * dist, Math.sin(a) * dist * 0.85, 7.5 + Math.random() * 3.5];
+    }).sort((p, q) => p[1] - q[1]);
+    for (const [x, y, r] of puffs) svg.append(svgEl('circle', { cx: x.toFixed(1), cy: y.toFixed(1), r: r.toFixed(1), fill }));
+    svg.append(svgEl('circle', { cx: -1, cy: -1.5, r: 8, fill }));
+    if (Math.random() < 0.5) svg.append(svgEl('ellipse', { cx: (Math.random() - 0.5) * 8, cy: 3 + Math.random() * 3, rx: 2.4, ry: 1.4, fill: '#9a5b1d' }));
+    return svg;
+  });
+}
+
+function throwPopcorn(img, power) {
+  if (window.matchMedia('(prefers-reduced-motion: reduce)').matches || flying > 90) return;
+  kernelShapes ??= makeKernelShapes();
+  const box = img.getBoundingClientRect();
+  const layer = document.querySelector('.popcorn-burst') ?? document.body.appendChild(h('div', { class: 'popcorn-burst', 'aria-hidden': 'true' }));
+  const centerX = box.left + box.width / 2;
+  const count = Math.round(10 + power * 9);
+  const rand = (a, b) => a + (b - a) * Math.random();
+
+  img.animate(
+    [{ transform: 'none' }, { transform: 'translateY(-14px) rotate(-2.5deg) scale(1.02)', offset: 0.18 }, { transform: 'translateY(3px) rotate(0.8deg)', offset: 0.5 }, { transform: 'none' }],
+    { duration: 520, easing: 'cubic-bezier(0.16, 1, 0.3, 1)' },
+  );
+  navigator.vibrate?.(12);
+
+  for (let i = 0; i < count; i += 1) {
+    // Start: irgendwo auf dem Popcorn-Berg in der Öffnung der Tüte (im Foto bei 20 bis 36 % der Höhe)
+    const x0 = box.left + box.width * rand(0.14, 0.86);
+    const y0 = box.top + box.height * rand(0.2, 0.36);
+    const T = rand(1.0, 1.5); // Sekunden
+    const vy = -rand(430, 760) * power; // Wurfhöhe: etwa bis zum Titel, bei schnellem Wischen bis ins Bild
+    const vx = (x0 - centerX) * rand(1.2, 2.6) + rand(-150, 150);
+    const g = 1250;
+    const s0 = rand(0.75, 1.05);
+    const s1 = rand(2.4, 7) * (0.8 + 0.2 * power); // kommt auf einen zu und wird dabei groß
+    const spin = rand(-620, 620);
+    const frames = [];
+    for (let k = 0; k <= 16; k += 1) {
+      const p = k / 16;
+      const t = p * T;
+      const scale = s0 * (s1 / s0) ** (p ** 1.6);
+      const x = x0 + vx * t * (1 + 0.8 * p);
+      const y = y0 + vy * t + 0.5 * g * t * t;
+      frames.push({ transform: `translate(${x.toFixed(1)}px, ${y.toFixed(1)}px) translate(-50%, -50%) rotate(${(spin * p).toFixed(0)}deg) scale(${scale.toFixed(3)})`, opacity: p < 0.72 ? 1 : 1 - (p - 0.72) / 0.28, offset: p });
+    }
+    const kernel = h('div', { class: 'kernel' }, kernelShapes[Math.floor(Math.random() * kernelShapes.length)].cloneNode(true));
+    layer.append(kernel);
+    flying += 1;
+    const anim = kernel.animate(frames, { duration: T * 1000, delay: rand(0, 140) * (i / count), easing: 'linear', fill: 'backwards' });
+    anim.finished.catch(() => {}).finally(() => {
+      kernel.remove();
+      flying -= 1;
+    });
+  }
+}
+
+function popcornBucket() {
+  const img = h('img', { src: './popcorn.jpg', alt: '', decoding: 'async', draggable: 'false' });
+  const bucket = h('div', { class: 'popcorn', 'aria-hidden': 'true' }, img);
+  let start = null;
+  bucket.addEventListener('pointerdown', (event) => {
+    start = { y: event.clientY, t: performance.now(), id: event.pointerId, fired: false };
+    bucket.setPointerCapture?.(event.pointerId);
+  });
+  bucket.addEventListener('pointermove', (event) => {
+    if (!start || start.fired || event.pointerId !== start.id) return;
+    const dy = start.y - event.clientY;
+    if (dy < 40) return;
+    start.fired = true; // schon beim Wischen werfen, nicht erst beim Loslassen
+    const speed = dy / Math.max(16, performance.now() - start.t); // Pixel pro Millisekunde
+    throwPopcorn(img, Math.min(1.45, Math.max(0.7, speed * 0.8)));
+  });
+  const end = () => {
+    start = null;
+  };
+  bucket.addEventListener('pointerup', end);
+  bucket.addEventListener('pointercancel', end);
+  return bucket;
 }
 
 // Die nächste Folge einer Serie (bei Filmen gibt es keine)

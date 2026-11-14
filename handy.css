@@ -3,7 +3,7 @@
  * Baut auf style.css auf (Grundgerüst, Abstände, Zustände) und ersetzt dessen Farben und Schriften.
  * Schriften: nur was auf den Geräten schon da ist (schmale Grotesk für Überschriften, Schreibschrift fürs
  * Leuchtschild), es wird nichts nachgeladen. Poster behalten ihre eigenen Farben. */
-@import url("./style.css?v=f89de4593e");
+@import url("./style.css?v=f63500235f");
 
 :root {
   color-scheme: dark;
@@ -97,7 +97,7 @@ h1, h2, h3 { font-stretch: var(--display-stretch); }
   position: relative;
   display: block;
   border: var(--frame-w) solid var(--gold-mid);
-  border-image: url("./frame.svg?v=f89de4593e") 32 / var(--frame-w) round;
+  border-image: url("./frame.svg?v=f63500235f") 32 / var(--frame-w) round;
   background: var(--velvet-lo);
   box-shadow: 0 var(--space-xs) var(--space-lg) calc(-1 * var(--space-2xs)) var(--shadow-deep);
 }
@@ -354,8 +354,23 @@ h1, h2, h3 { font-stretch: var(--display-stretch); }
 [data-view="watch"] main { padding-bottom: calc(var(--tabs-height) + env(safe-area-inset-bottom)); }
 /* Die Tüte füllt den freien Platz unter dem Titel bis zu einer Höchstgröße; mehr Platz zeigt mehr vom Becher. */
 .page--watch { display: flex; flex-direction: column; justify-content: space-between; min-height: calc(100dvh - var(--tabs-height) - env(safe-area-inset-bottom)); }
-.popcorn { flex: 1 1 0; align-self: center; width: min(78vw, 24rem); min-height: 10rem; max-height: min(78vw, 24rem); overflow: hidden; margin-top: var(--space-lg); pointer-events: none; }
-.popcorn img { display: block; width: 100%; height: auto; transform: rotate(-3deg); transform-origin: 50% 100%; }
+.popcorn {
+  flex: 1 1 0; align-self: center; width: min(82vw, 25rem); min-height: 10rem; max-height: min(86vw, 27rem); overflow: hidden; margin-top: var(--space-lg);
+  touch-action: none; cursor: grab; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none;
+}
+.popcorn:active { cursor: grabbing; }
+/* Foto mit dunklem Hintergrund: oben und an den Seiten weich in den Vorhang auslaufen lassen */
+.popcorn img {
+  display: block; width: 100%; height: auto; -webkit-user-drag: none; transform-origin: 50% 100%;
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0, var(--velvet-night) 12%), linear-gradient(to right, transparent 0, var(--velvet-night) 7%, var(--velvet-night) 93%, transparent 100%);
+  -webkit-mask-composite: source-in;
+  mask-image: linear-gradient(to bottom, transparent 0, var(--velvet-night) 12%), linear-gradient(to right, transparent 0, var(--velvet-night) 7%, var(--velvet-night) 93%, transparent 100%);
+  mask-composite: intersect;
+}
+/* Fliegendes Popcorn liegt über allem, fängt aber keine Berührungen ab */
+.popcorn-burst { position: fixed; inset: 0; z-index: var(--z-toast); pointer-events: none; overflow: hidden; }
+.kernel { position: absolute; left: 0; top: 0; width: 30px; height: 30px; will-change: transform, opacity; }
+.kernel svg { display: block; width: 100%; height: 100%; overflow: visible; }
 @media (max-height: 560px) { .popcorn { display: none; } }
 
 /* ---------- Leiste unten ---------- */
