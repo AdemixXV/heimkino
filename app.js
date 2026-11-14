@@ -2,11 +2,11 @@
 // Detailseite mit Beschreibung, IMDb-Bewertung, FSK, Trailer, Besetzung und ähnlichen Filmen, Suche mit
 // Genres, Abspielen mit Weiterschauen. Alles kommt direkt aus OneDrive, die Filmdaten aus
 // "heimkino-katalog.json" (erzeugt auf dem Laptop von scripts/film-infos.js).
-import { AuthError, completeLogin, hasSession, isConfigured, login, logout } from './auth.js?v=0b72f32700';
-import { announce, h } from './dom.js?v=0b72f32700';
-import { NBSP, formatBytes, formatDuration, initialOf, resolutionLabel } from './format.js?v=0b72f32700';
-import { SignInNeeded, demo, oneDrive } from './sources.js?v=0b72f32700';
-import { allProgress, clearProgress, getProgress, isFinished, isResumable, saveProgress } from './store.js?v=0b72f32700';
+import { AuthError, completeLogin, hasSession, isConfigured, login, logout } from './auth.js?v=f89de4593e';
+import { announce, h } from './dom.js?v=f89de4593e';
+import { NBSP, formatBytes, formatDuration, initialOf, resolutionLabel } from './format.js?v=f89de4593e';
+import { SignInNeeded, demo, oneDrive } from './sources.js?v=f89de4593e';
+import { allProgress, clearProgress, getProgress, isFinished, isResumable, saveProgress } from './store.js?v=f89de4593e';
 
 const view = document.getElementById('view');
 const tabLinks = [...document.querySelectorAll('.tabs__link')];
@@ -740,7 +740,7 @@ async function renderWatch(id, token) {
   view.replaceChildren(
     h(
       'div',
-      { class: 'page' },
+      { class: 'page page--watch' },
       h(
         'div',
         { class: 'container player' },
@@ -754,6 +754,8 @@ async function renderWatch(id, token) {
         h('div', { class: 'player__caption' }, h('h1', { class: 'player__title', text: name }), t?.kind === 'tv' && h('p', { class: 'player__sub', text: episodeLabel(t, item) })),
         ctx.notice,
       ),
+      // Popcorn-Tüte unten, als stünde sie vor einem (scripts/make-popcorn.js)
+      h('div', { class: 'popcorn', 'aria-hidden': 'true' }, h('img', { src: './popcorn.svg', alt: '', decoding: 'async' })),
     ),
   );
   ctx.onKey = (event) => onKey(ctx, event);
@@ -944,6 +946,7 @@ function render() {
   state.renderId += 1;
   if (state.route.name === 'library') state.listHash = '#/';
   else if (state.route.name === 'search') state.listHash = searchHash(state.route);
+  document.body.dataset.view = state.route.name;
   markTab();
   if (state.route.name === 'watch') renderWatch(state.route.id, state.renderId);
   else if (state.route.name === 'title') renderTitle(state.route.key, state.renderId);
