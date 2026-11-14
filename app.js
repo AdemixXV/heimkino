@@ -1,6 +1,7 @@
-// Heimkino als Handy-App: Startseite mit großer Titelfläche und Poster-Reihen, Detailseite mit Beschreibung,
-// IMDb-Bewertung, FSK, Trailer und Folgen, Abspielen mit Weiterschauen. Alles kommt direkt aus OneDrive,
-// die Filmdaten aus "heimkino-katalog.json" (erzeugt auf dem Laptop von scripts/film-infos.js).
+// Heimkino als Handy-App im Stil eines alten Kinos: Leuchtschrift über der Bühne, Poster in Goldrahmen,
+// Detailseite mit Beschreibung, IMDb-Bewertung, FSK, Trailer, Besetzung und ähnlichen Filmen, Suche mit
+// Genres, Abspielen mit Weiterschauen. Alles kommt direkt aus OneDrive, die Filmdaten aus
+// "heimkino-katalog.json" (erzeugt auf dem Laptop von scripts/film-infos.js).
 import { AuthError, completeLogin, hasSession, isConfigured, login, logout } from './auth.js';
 import { announce, h } from './dom.js';
 import { NBSP, formatBytes, formatDuration, initialOf, resolutionLabel } from './format.js';
@@ -8,10 +9,7 @@ import { SignInNeeded, demo, oneDrive } from './sources.js';
 import { allProgress, clearProgress, getProgress, isFinished, isResumable, saveProgress } from './store.js';
 
 const view = document.getElementById('view');
-const foot = document.getElementById('foot');
-const searchInput = document.getElementById('search');
-const searchForm = document.getElementById('search-form');
-const refreshButton = document.getElementById('rescan');
+const tabLinks = [...document.querySelectorAll('.tabs__link')];
 
 const MODE_KEY = 'heimkino-handy:v1:mode';
 const CACHE_KEY = 'heimkino-handy:v2:library';
@@ -24,7 +22,8 @@ const state = {
   account: '',
   error: null,
   loading: false,
-  route: { name: 'library', q: '' },
+  route: { name: 'library' },
+  listHash: '#/', // wohin "Zurück" auf der Detailseite führt: Startseite oder die letzte Suche
   teardown: null,
   renderId: 0,
 };
@@ -59,6 +58,23 @@ const PLAY_ICON = () => {
   return svg;
 };
 
+const SEARCH_ICON = () => {
+  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  svg.setAttribute('viewBox', '0 0 24 24');
+  svg.setAttribute('aria-hidden', 'true');
+  svg.setAttribute('class', 'searchbox__icon');
+  for (const [tag, attrs] of [['circle', { cx: 11, cy: 11, r: 6.5 }], ['path', { d: 'm16 16 4.5 4.5' }]]) {
+    const el = document.createElementNS('http://www.w3.org/2000/svg', tag);
+    for (const [k, v] of Object.entries(attrs)) el.setAttribute(k, String(v));
+    el.setAttribute('fill', 'none');
+    el.setAttribute('stroke', 'currentColor');
+    el.setAttribute('stroke-width', '2');
+    el.setAttribute('stroke-linecap', 'round');
+    svg.append(el);
+  }
+  return svg;
+};
+
 function button(label, onclick, kind = '') {
   return h('button', { class: `btn ${kind}`.trim(), type: 'button', onclick, text: label });
 }
@@ -83,6 +99,21 @@ function art(src, label, { className = 'art', alt = '', eager = false } = {}, ..
     h('span', { class: 'art__initial', 'aria-hidden': 'true', text: label }),
     src && h('img', { src, alt, loading: eager ? 'eager' : 'lazy', decoding: 'async', referrerpolicy: 'no-referrer', onerror: (event) => event.target.remove() }),
     ...extra,
+  );
+}
+
+// Goldener Bilderrahmen um ein Bild (frame.svg als border-image)
+function framed(content, className = '', attrs = {}) {
+  return h('div', { class: `frame ${className}`.trim(), ...attrs }, content);
+}
+
+// Leuchtschrift über der Bühne. Auf der Startseite ist sie die Hauptüberschrift.
+function signHead({ heading = false } = {}) {
+  return h(
+    'header',
+    { class: 'marquee-head' },
+    h('div', { class: 'valance', 'aria-hidden': 'true' }),
+    h('div', { class: 'sign' }, h(heading ? 'h1' : 'p', { class: 'sign__neon', text: 'Heimkino' })),
   );
 }
 
@@ -176,16 +207,61 @@ function nextItemOf(t) {
 function parseRoute() {
   const hash = window.location.hash.replace(/^#/, '') || '/';
   const [path, query = ''] = hash.split('?');
+  const params = new URLSearchParams(query);
   const watch = /^\/watch\/(.+)$/.exec(path);
   if (watch) return { name: 'watch', id: decodeURIComponent(watch[1]) };
   const title = /^\/title\/(.+)$/.exec(path);
   if (title) return { name: 'title', key: decodeURIComponent(title[1]) };
-  return { name: 'library', q: new URLSearchParams(query).get('q') ?? '' };
+  if (path === '/suchen' || params.get('q')) return { name: 'search', q: params.get('q') ?? '', genre: params.get('genre') ?? '' };
+  if (path === '/profil') return { name: 'profile' };
+  return { name: 'library' };
 }
 
-const libraryHash = (q) => (q ? `#/?q=${encodeURIComponent(q)}` : '#/');
+function searchHash({ q = '', genre = '' } = {}) {
+  const params = new URLSearchParams();
+  if (q) params.set('q', q);
+  if (genre) params.set('genre', genre);
+  const query = params.toString();
+  return query ? `#/suchen?${query}` : '#/suchen';
+}
 const titleHash = (key) => `#/title/${encodeURIComponent(key)}`;
 const watchHash = (id) => `#/watch/${encodeURIComponent(id)}`;
+
+// Die Leiste unten zeigt, wo man ist. Detailseite und Abspielen gehören zum Bereich, aus dem man kam.
+function markTab() {
+  const from = state.listHash.startsWith('#/suchen') ? 'search' : 'library';
+  const current = { library: 'library', search: 'search', profile: 'profile' }[state.route.name] ?? from;
+  for (const link of tabLinks) {
+    if (link.dataset.tab === current) link.setAttribute('aria-current', 'page');
+    else link.removeAttribute('aria-current');
+  }
+}
+
+// ---------- Genres und ähnliche Titel ----------
+
+function genreCounts() {
+  const counts = new Map();
+  for (const t of state.titles) for (const g of t.meta?.genres ?? []) counts.set(g, (counts.get(g) ?? 0) + 1);
+  return [...counts.entries()].sort((a, b) => b[1] - a[1] || collator.compare(a[0], b[0]));
+}
+
+const byRating = (a, b) => (b.meta?.imdbRating ?? b.meta?.tmdbRating ?? 0) - (a.meta?.imdbRating ?? a.meta?.tmdbRating ?? 0);
+
+function similarTo(t, limit = 12) {
+  const genres = new Set(t.meta?.genres ?? []);
+  if (genres.size === 0) return [];
+  return state.titles
+    .filter((other) => other !== t)
+    .map((other) => ({ other, shared: (other.meta?.genres ?? []).filter((g) => genres.has(g)).length }))
+    .filter((x) => x.shared > 0)
+    .sort((a, b) => b.shared - a.shared || byRating(a.other, b.other))
+    .slice(0, limit)
+    .map((x) => x.other);
+}
+
+function searchText(t) {
+  return [t.name, t.meta?.originalTitle, t.fallbackName, ...(t.meta?.genres ?? []), ...(t.meta?.cast ?? []).map((c) => c.name)].filter(Boolean).join(' ').toLowerCase();
+}
 
 // ---------- Daten ----------
 
@@ -205,7 +281,6 @@ function setLibrary(library) {
 
 async function loadLibrary() {
   state.loading = true;
-  refreshButton.setAttribute('aria-busy', 'true');
   try {
     const result = await state.source.library();
     setLibrary({ ...result, at: Date.now() });
@@ -221,7 +296,6 @@ async function loadLibrary() {
     return false;
   } finally {
     state.loading = false;
-    refreshButton.removeAttribute('aria-busy');
   }
 }
 
@@ -237,72 +311,67 @@ function posterCard(t) {
     h(
       'a',
       { class: 'poster', href: titleHash(t.key) },
-      art(posterOf(t), initialOf(t.name), {}, started && meter(progress[started.id])),
+      framed(art(posterOf(t), initialOf(t.name), {}, started && meter(progress[started.id]))),
       h('h3', { class: 'poster__title', text: t.name }),
       facts.length > 0 && h('ul', { class: 'facts' }, facts),
     ),
   );
 }
 
+// Angefangenes Video: Poster des Titels, darunter Folge oder Restzeit
 function continueCard(item) {
   const t = titleOfItem(item);
   const progress = getProgress(item.id);
-  const em = t ? episodeMeta(t, item) : null;
   const left = progress ? Math.max(0, progress.d - progress.t) : 0;
-  const image = em?.still ?? (t ? backdropOf(t) : item.thumb);
+  const label = t?.kind === 'tv' ? episodeLabel(t, item) : left > 0 ? `noch ${runtimeLabel(left / 60)}` : '';
   return h(
     'li',
     {},
     h(
       'a',
-      { class: 'still', href: watchHash(item.id) },
-      art(image, initialOf(t?.name ?? item.title), {}, meter(progress)),
-      h('h3', { class: 'still__title', text: t?.kind === 'tv' ? `${t.name}: ${episodeLabel(t, item)}` : (t?.name ?? item.title) }),
-      left > 0 && h('ul', { class: 'facts' }, h('li', { text: `noch ${runtimeLabel(left / 60)}` })),
+      { class: 'poster', href: watchHash(item.id) },
+      framed(art(t ? posterOf(t) : item.thumb, initialOf(t?.name ?? item.title), {}, meter(progress))),
+      h('h3', { class: 'poster__title', text: t?.name ?? item.title }),
+      label && h('ul', { class: 'facts' }, h('li', { text: label })),
     ),
   );
 }
 
-function row(title, cards, { wide = false } = {}) {
+function row(title, cards, { more = null } = {}) {
   const id = `row-${title.replace(/\W+/g, '-').toLowerCase()}`;
   return h(
     'section',
     { class: 'row container', 'aria-labelledby': id },
-    h('div', { class: 'row__head' }, h('h2', { id, text: title })),
-    h('ul', { class: `rail${wide ? ' rail--wide' : ''}` }, cards),
+    h('div', { class: 'row__head' }, h('h2', { id, text: title }), more && h('a', { class: 'row__more', href: more, text: 'Alle' })),
+    h('ul', { class: 'rail' }, cards),
   );
 }
 
-function pickHero() {
+// Der Titel auf der Bühne: zuletzt angefangen, sonst der neueste mit Poster
+function pickFeature() {
   const progress = allProgress();
   const resumeItem = state.library.items.filter((i) => isResumable(progress[i.id])).sort((a, b) => progress[b.id].at - progress[a.id].at)[0];
   const resumeTitle = resumeItem && titleOfItem(resumeItem);
-  if (resumeTitle?.meta?.backdrop) return resumeTitle;
-  const withArt = state.titles.filter((t) => t.meta?.backdrop).sort((a, b) => b.added - a.added);
+  if (resumeTitle?.meta?.poster) return resumeTitle;
+  const withArt = state.titles.filter((t) => t.meta?.poster).sort((a, b) => b.added - a.added);
   return withArt[0] ?? [...state.titles].sort((a, b) => b.added - a.added)[0];
 }
 
-function hero(t) {
+function feature(t) {
   const next = nextItemOf(t);
   const progress = getProgress(next.id);
-  const resumable = isResumable(progress);
-  const facts = [ratingItem(t.meta), t.year && h('li', { text: String(t.year) }), t.meta?.fsk && h('li', {}, h('span', { class: 'badge', text: `FSK ${t.meta.fsk}` })), t.meta?.runtime && t.kind === 'movie' && h('li', { text: runtimeLabel(t.meta.runtime) })].filter(Boolean);
+  const facts = [ratingItem(t.meta), t.year && h('li', { text: String(t.year) }), t.meta?.fsk && h('li', {}, h('span', { class: 'badge', text: `FSK ${t.meta.fsk}` }))].filter(Boolean);
   return h(
     'section',
-    { class: 'hero', 'aria-labelledby': 'hero-title' },
-    h('div', { class: 'hero__art' }, backdropOf(t) && h('img', { src: backdropOf(t), alt: '', decoding: 'async', fetchpriority: 'high', referrerpolicy: 'no-referrer', onerror: (e) => e.target.remove() })),
+    { class: 'feature', 'aria-labelledby': 'feature-title' },
+    h('a', { class: 'feature__link', href: titleHash(t.key), tabindex: '-1', 'aria-hidden': 'true' }, framed(art(posterOf(t), initialOf(t.name), { eager: true }), 'feature__poster')),
+    h('h2', { class: 'feature__title', id: 'feature-title', text: t.name }),
+    facts.length > 0 && h('ul', { class: 'facts' }, facts),
     h(
       'div',
-      { class: 'container hero__body' },
-      h('h2', { class: 'hero__title', id: 'hero-title', text: t.name }),
-      facts.length > 0 && h('ul', { class: 'facts' }, facts),
-      t.meta?.overview && h('p', { class: 'hero__text', text: t.meta.overview }),
-      h(
-        'div',
-        { class: 'actions' },
-        linkButton(playLabel(t, next, progress), watchHash(next.id), 'btn--play', PLAY_ICON()),
-        linkButton('Mehr Infos', titleHash(t.key), 'btn--quiet'),
-      ),
+      { class: 'actions' },
+      linkButton(playLabel(t, next, progress), watchHash(next.id), 'btn--play', PLAY_ICON()),
+      linkButton('Mehr Infos', titleHash(t.key), 'btn--quiet'),
     ),
   );
 }
@@ -311,41 +380,40 @@ function renderLibrary() {
   document.title = 'Heimkino';
   const lib = state.library;
   if (!lib) {
-    view.replaceChildren(state.error ? errorState() : skeleton());
+    view.replaceChildren(signHead({ heading: true }), state.error ? errorState() : skeleton());
     return;
   }
   const notices = (lib.missing ?? []).map((p) => h('p', { class: 'notice container', text: `Den Ordner „${p}“ gibt es in OneDrive noch nicht. Er entsteht, sobald dort die erste Handy-Fassung liegt.` }));
   if (state.error) notices.unshift(h('p', { class: 'notice container', role: 'status', text: 'Gerade keine Verbindung zu OneDrive. Du siehst den letzten Stand.' }));
 
   if (state.titles.length === 0) {
-    view.replaceChildren(...notices, stateBlock({ title: 'Noch keine Filme', text: 'In OneDrive liegen noch keine Handy-Fassungen. Sie erscheinen hier, sobald die Umwandlung auf dem Laptop die ersten fertig hat.', actions: [button('Neu laden', refresh)] }));
-    return;
-  }
-
-  const q = state.route.q?.trim().toLowerCase();
-  if (q) {
-    const found = state.titles.filter((t) => [t.name, t.meta?.originalTitle, t.fallbackName, ...(t.meta?.genres ?? [])].filter(Boolean).join(' ').toLowerCase().includes(q));
-    if (found.length === 0) {
-      view.replaceChildren(stateBlock({ title: 'Nichts gefunden', text: `Zu „${state.route.q}“ gibt es keinen Titel. Prüfe die Schreibweise oder lösche die Suche.`, actions: [button('Suche löschen', () => { searchInput.value = ''; window.location.hash = '#/'; })] }));
-      return;
-    }
-    view.replaceChildren(h('div', { class: 'page' }, h('section', { class: 'container', 'aria-labelledby': 'results' }, h('div', { class: 'row__head' }, h('h1', { id: 'results', class: 'visually-hidden', text: 'Suchergebnisse' }), h('h2', { text: `${found.length} ${found.length === 1 ? 'Treffer' : 'Treffer'} für „${state.route.q}“` })), h('ul', { class: 'grid' }, found.map(posterCard)))));
+    view.replaceChildren(signHead({ heading: true }), ...notices, stateBlock({ title: 'Noch keine Filme', text: 'In OneDrive liegen noch keine Handy-Fassungen. Sie erscheinen hier, sobald die Umwandlung auf dem Laptop die ersten fertig hat.', actions: [button('Neu laden', refresh)] }));
     return;
   }
 
   const progress = allProgress();
-  const resumable = state.library.items.filter((i) => isResumable(progress[i.id])).sort((a, b) => progress[b.id].at - progress[a.id].at).slice(0, 12);
+  const watched = state.library.items.filter((i) => progress[i.id]).sort((a, b) => progress[b.id].at - progress[a.id].at);
+  const resumable = watched.filter((i) => isResumable(progress[i.id])).slice(0, 12);
+  const lastSeen = watched[0] && titleOfItem(watched[0]);
+  const because = lastSeen ? similarTo(lastSeen) : [];
   const recent = [...state.titles].sort((a, b) => b.added - a.added).slice(0, 12);
   const series = state.titles.filter((t) => t.kind === 'tv');
   const movies = state.titles.filter((t) => t.kind !== 'tv');
+  // Genre-Reihen erst ab drei Titeln, höchstens drei Reihen
+  const genreRows = genreCounts()
+    .filter(([, n]) => n >= 3)
+    .slice(0, 3)
+    .map(([g]) => row(g, state.titles.filter((t) => t.meta?.genres?.includes(g)).sort(byRating).slice(0, 12).map(posterCard), { more: searchHash({ genre: g }) }));
 
   const parts = [
-    h('h1', { class: 'visually-hidden', text: 'Heimkino' }),
-    hero(pickHero()),
+    signHead({ heading: true }),
+    feature(pickFeature()),
     ...notices,
-    resumable.length > 0 && row('Weiter ansehen', resumable.map(continueCard), { wide: true }),
+    resumable.length > 0 && row('Weitersehen', resumable.map(continueCard)),
+    because.length > 0 && row(`Weil du „${lastSeen.name}“ geschaut hast`, because.map(posterCard)),
     state.titles.length > 6 && row('Neu hinzugefügt', recent.map(posterCard)),
     series.length > 0 && row('Serien', series.map(posterCard)),
+    ...genreRows,
     movies.length > 0 && h(
       'section',
       { class: 'row container', 'aria-labelledby': 'row-all' },
@@ -354,6 +422,123 @@ function renderLibrary() {
     ),
   ];
   view.replaceChildren(...parts.filter(Boolean));
+}
+
+// ---------- Suchen ----------
+
+function genreTiles() {
+  return h(
+    'ul',
+    { class: 'tiles' },
+    genreCounts().map(([g, n]) => {
+      const pick = state.titles.filter((t) => t.meta?.genres?.includes(g) && t.meta?.backdrop).sort(byRating)[0];
+      return h(
+        'li',
+        {},
+        h(
+          'a',
+          { class: 'tile', href: searchHash({ genre: g }) },
+          framed([art(pick ? backdropOf(pick) : null, ''), h('span', { class: 'tile__label' }, h('span', { class: 'tile__name', text: g }), h('span', { class: 'tile__count', text: `${n} Titel` }))]),
+        ),
+      );
+    }),
+  );
+}
+
+function fillResults(results) {
+  const { q = '', genre = '' } = state.route;
+  const needle = q.trim().toLowerCase();
+  if (!needle && !genre) {
+    results.replaceChildren(genreCounts().length > 0 ? genreTiles() : h('ul', { class: 'grid' }, state.titles.map(posterCard)));
+    return;
+  }
+  let found = state.titles;
+  if (genre) found = found.filter((t) => t.meta?.genres?.includes(genre));
+  if (needle) found = found.filter((t) => searchText(t).includes(needle));
+  if (found.length === 0) {
+    results.replaceChildren(h('div', { class: 'state' }, h('h2', { text: 'Nichts gefunden' }), h('p', { text: needle ? `Zu „${q.trim()}“${genre ? ` im Genre ${genre}` : ''} gibt es keinen Titel. Prüfe die Schreibweise.` : `Im Genre ${genre} gibt es noch keinen Titel.` })));
+    return;
+  }
+  const what = [genre, needle && `„${q.trim()}“`].filter(Boolean).join(', ');
+  results.replaceChildren(h('h2', { class: 'search__count', text: `${found.length} Treffer: ${what}` }), h('ul', { class: 'grid' }, found.sort(byRating).map(posterCard)));
+}
+
+function renderSearch() {
+  document.title = 'Suchen | Heimkino';
+  if (!state.library) {
+    view.replaceChildren(state.error ? errorState() : skeleton());
+    return;
+  }
+  const { q = '', genre = '' } = state.route;
+  const results = h('div', { class: 'search__results' });
+  const input = h('input', { class: 'input', id: 'search', name: 'q', type: 'search', placeholder: 'Titel, Genre oder Name', autocomplete: 'off', enterkeyhint: 'search', value: q });
+  let timer = null;
+  input.addEventListener('input', () => {
+    window.clearTimeout(timer);
+    timer = window.setTimeout(() => {
+      state.route = { ...state.route, q: input.value };
+      state.listHash = searchHash(state.route);
+      window.history.replaceState(null, '', state.listHash);
+      fillResults(results);
+    }, 120);
+  });
+  const pickGenre = (g) => {
+    state.route = { ...state.route, q: input.value, genre: g };
+    state.listHash = searchHash(state.route);
+    window.history.replaceState(null, '', state.listHash);
+    renderSearch();
+  };
+  const genres = genreCounts();
+  view.replaceChildren(
+    h(
+      'div',
+      { class: 'page container search' },
+      h('h1', { class: 'page-title', text: 'Suchen' }),
+      h('form', { class: 'searchbox', role: 'search', onsubmit: (event) => { event.preventDefault(); input.blur(); } }, h('label', { class: 'visually-hidden', for: 'search', text: 'Titel suchen' }), SEARCH_ICON(), input),
+      genres.length > 0 && h(
+        'ul',
+        { class: 'tickets', 'aria-label': 'Genres' },
+        genres.map(([g]) => h('li', {}, h('button', { class: 'ticket', type: 'button', 'aria-pressed': String(genre === g), text: g, onclick: () => pickGenre(genre === g ? '' : g) }))),
+      ),
+      results,
+    ),
+  );
+  fillResults(results);
+}
+
+// ---------- Profil ----------
+
+function renderProfile() {
+  document.title = 'Profil | Heimkino';
+  const lib = state.library;
+  const isDemo = state.source === demo;
+  const when = lib?.at ? new Date(lib.at).toLocaleString('de-DE', { dateStyle: 'short', timeStyle: 'short' }) : '';
+  const hasMeta = Object.keys(lib?.meta ?? {}).length > 0;
+  const refreshButton = button(state.loading ? 'Lädt ...' : 'Bibliothek aktualisieren', refresh);
+  if (state.loading) refreshButton.setAttribute('aria-busy', 'true');
+  const signOut = () => {
+    logout();
+    storageSet(window.localStorage, CACHE_KEY, null);
+    window.location.replace(window.location.pathname);
+  };
+  view.replaceChildren(
+    h(
+      'div',
+      { class: 'page container profile' },
+      h('h1', { class: 'page-title', text: 'Profil' }),
+      framed(
+        h('dl', { class: 'filedata' }, [
+          ['Konto', isDemo ? 'Demo' : state.account || 'Microsoft-Konto'],
+          ['Titel', lib ? String(state.titles.length) : ''],
+          ['Stand', when],
+        ].filter(([, v]) => v).map(([label, value]) => h('div', {}, h('dt', { text: label }), h('dd', { text: value })))),
+        'profile__card',
+      ),
+      h('div', { class: 'actions' }, refreshButton, isDemo ? button('Demo beenden', endDemo, 'btn--quiet') : button('Abmelden', signOut, 'btn--quiet')),
+      h('p', { class: 'hint', text: 'Neue Filme erscheinen, sobald ihre Handy-Fassung in OneDrive liegt. Poster und Beschreibung kommen dazu, wenn auf dem Laptop „film-infos“ gelaufen ist.' }),
+      hasMeta && h('p', { class: 'credit', text: 'Filmdaten und Bilder von TMDB. Diese App nutzt die TMDB-API, ist aber nicht von TMDB unterstützt oder zertifiziert. Bewertungen von IMDb.' }),
+    ),
+  );
 }
 
 function skeleton() {
@@ -425,12 +610,37 @@ async function renderTitle(key, token) {
               h(
                 'a',
                 { class: 'episode', href: watchHash(item.id) },
-                art(image, String(item.episode ?? ''), {}, meter(all[item.id])),
+                framed(art(image, String(item.episode ?? ''), {}, meter(all[item.id]))),
                 h('div', { class: 'episode__body' }, h('h3', { class: 'episode__title', text: episodeLabel(t, item) }), minutes > 0 && h('ul', { class: 'facts' }, h('li', { text: runtimeLabel(minutes) })), em?.overview && h('p', { class: 'episode__text', text: em.overview })),
               ),
             );
           }),
         ),
+      ),
+    );
+  }
+  if (meta.cast?.length > 0) {
+    sections.push(
+      h(
+        'section',
+        { class: 'detail__section container', 'aria-labelledby': 'cast' },
+        h('h2', { id: 'cast', text: 'Besetzung' }),
+        h(
+          'ul',
+          { class: 'rail rail--cast' },
+          meta.cast.map((c) => h('li', { class: 'person' }, h('div', { class: 'person__ring' }, art(c.photo, initialOf(c.name), { className: 'art person__photo' })), h('p', { class: 'person__name', text: c.name }), c.role && h('p', { class: 'person__role', text: c.role }))),
+        ),
+      ),
+    );
+  }
+  const similar = similarTo(t);
+  if (similar.length > 0) {
+    sections.push(
+      h(
+        'section',
+        { class: 'detail__section container', 'aria-labelledby': 'similar' },
+        h('h2', { id: 'similar', text: similar.every((s) => s.kind === 'movie') ? 'Ähnliche Filme' : 'Ähnliche Titel' }),
+        h('ul', { class: 'rail' }, similar.map(posterCard)),
       ),
     );
   }
@@ -452,17 +662,20 @@ async function renderTitle(key, token) {
     h(
       'article',
       { class: 'detail' },
-      h('div', { class: 'detail__art' }, backdropOf(t) && h('img', { src: backdropOf(t), alt: '', decoding: 'async', fetchpriority: 'high', referrerpolicy: 'no-referrer', onerror: (e) => e.target.remove() })),
-      h('div', { class: 'container detail__top' }, h('a', { class: 'btn btn--text back', href: libraryHash(''), text: 'Zur Startseite' })),
+      h('div', { class: 'container detail__top' }, h('a', { class: 'btn btn--text back', href: state.listHash, text: state.listHash.startsWith('#/suchen') ? 'Zur Suche' : 'Zur Startseite' })),
+      h(
+        'header',
+        { class: 'container detail__head' },
+        h('div', { class: 'marquee' }, h('h1', { class: 'marquee__title', text: t.name })),
+        meta.originalTitle && meta.originalTitle !== t.name && h('p', { class: 'detail__original', text: `Originaltitel: ${meta.originalTitle}` }),
+      ),
       h(
         'div',
         { class: 'container detail__layout' },
-        art(meta.poster, initialOf(t.name), { className: 'art detail__poster', alt: `Poster: ${t.name}`, eager: true }),
+        framed(art(meta.poster ?? posterOf(t), initialOf(t.name), { alt: `Poster: ${t.name}`, eager: true }), 'detail__poster'),
         h(
           'div',
           { class: 'detail__info' },
-          h('h1', { text: t.name }),
-          meta.originalTitle && meta.originalTitle !== t.name && h('p', { class: 'detail__original', text: `Originaltitel: ${meta.originalTitle}` }),
           facts.length > 0 && h('ul', { class: 'facts' }, facts),
           h('div', { class: 'actions' }, actions),
           meta.tagline && h('p', { class: 'detail__tagline', text: meta.tagline }),
@@ -477,7 +690,7 @@ async function renderTitle(key, token) {
 
 // Trailer von YouTube, erst beim Klick geladen (ohne Cookies: youtube-nocookie.com)
 function openTrailer(t) {
-  const frame = h('div', { class: 'trailer__frame' });
+  const frame = h('div', { class: 'frame trailer__frame' });
   const dialog = h(
     'dialog',
     { class: 'trailer', 'aria-label': `Trailer: ${t.name}` },
@@ -512,7 +725,8 @@ async function renderWatch(id, token) {
   const t = titleOfItem(item);
   const name = t?.name ?? item.title;
   document.title = `${name} | Heimkino`;
-  const ctx = { item, t, video: null, media: h('div'), notice: h('p', { class: 'notice', 'aria-live': 'polite' }), resumed: false, retried: false, lastSave: 0, token };
+  const ctx = { item, t, video: null, media: h('div', { class: 'player__media' }), notice: h('p', { class: 'notice', 'aria-live': 'polite' }), resumed: false, retried: false, lastSave: 0, token };
+  const following = nextInList(t, item);
 
   view.replaceChildren(
     h(
@@ -521,9 +735,14 @@ async function renderWatch(id, token) {
       h(
         'div',
         { class: 'container player' },
-        h('a', { class: 'btn btn--text back', href: t ? titleHash(t.key) : '#/', text: t?.kind === 'tv' ? `Zurück zu ${name}` : 'Zurück' }),
-        ctx.media,
-        h('div', {}, h('h1', { class: 'player__title', text: name }), t?.kind === 'tv' && h('p', { class: 'player__sub', text: episodeLabel(t, item) })),
+        h(
+          'div',
+          { class: 'player__bar' },
+          h('a', { class: 'btn btn--text back', href: t ? titleHash(t.key) : '#/', text: t?.kind === 'tv' ? `Zurück zu ${name}` : 'Zurück' }),
+          following && linkButton('Nächste Folge', watchHash(following.id), 'btn--small'),
+        ),
+        framed(ctx.media, 'player__screen'),
+        h('div', { class: 'player__caption' }, h('h1', { class: 'player__title', text: name }), t?.kind === 'tv' && h('p', { class: 'player__sub', text: episodeLabel(t, item) })),
         ctx.notice,
       ),
     ),
@@ -614,10 +833,15 @@ function onVideoError(ctx) {
   );
 }
 
+// Die nächste Folge einer Serie (bei Filmen gibt es keine)
+function nextInList(t, item) {
+  if (t?.kind !== 'tv') return null;
+  const at = t.items.findIndex((i) => i.id === item.id);
+  return at >= 0 ? (t.items[at + 1] ?? null) : null;
+}
+
 function showNext(ctx) {
-  const list = ctx.t?.items ?? [];
-  const at = list.findIndex((i) => i.id === ctx.item.id);
-  const next = at >= 0 ? list[at + 1] : null;
+  const next = nextInList(ctx.t, ctx.item);
   if (!next) return;
   ctx.notice.replaceChildren(`Als Nächstes: ${episodeLabel(ctx.t, next)} `, button('Abspielen', () => { window.location.hash = watchHash(next.id); }));
 }
@@ -653,9 +877,8 @@ function showSignIn(message = '') {
   state.teardown = null;
   document.body.dataset.locked = '';
   document.title = 'Anmelden | Heimkino';
-  foot.replaceChildren();
   if (!isConfigured()) {
-    view.replaceChildren(stateBlock({
+    view.replaceChildren(signHead(), stateBlock({
       title: 'Noch nicht mit OneDrive verbunden',
       text: 'Für die Verbindung fehlt noch die Anwendungs-ID von Microsoft (in handy-app/config.js). Bis dahin zeigt die Demo, wie die App aussieht.',
       actions: [button('Demo ansehen', startDemo)],
@@ -671,6 +894,7 @@ function showSignIn(message = '') {
     }
   });
   view.replaceChildren(
+    signHead(),
     h(
       'div',
       { class: 'page' },
@@ -679,7 +903,7 @@ function showSignIn(message = '') {
         { class: 'container' },
         h(
           'div',
-          { class: 'state' },
+          { class: 'state state--center' },
           h('h1', { text: 'Mit OneDrive verbinden' }),
           h('p', { text: 'Heimkino zeigt die Handy-Fassungen aus deinem OneDrive. Du meldest dich direkt bei Microsoft an, die App sieht dein Passwort nie und darf nur lesen.' }),
           message && h('p', { class: 'help', dataset: { tone: 'error' }, role: 'alert', text: message }),
@@ -703,42 +927,27 @@ function endDemo() {
   window.location.replace(window.location.pathname);
 }
 
-// ---------- Fuß ----------
-
-function renderFoot() {
-  if (!state.library || document.body.hasAttribute('data-locked')) {
-    foot.replaceChildren();
-    return;
-  }
-  const when = state.library.at ? new Date(state.library.at).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' }) : '';
-  const left = `${state.titles.length} ${state.titles.length === 1 ? 'Titel' : 'Titel'}${when ? `, Stand ${when}` : ''}.`;
-  const right =
-    state.source === demo
-      ? h('div', { class: 'foot__actions' }, h('span', { text: 'Demo' }), button('Demo beenden', endDemo, 'btn--text'))
-      : h('div', { class: 'foot__actions' }, state.account && h('span', { text: state.account }), button('Abmelden', () => { logout(); storageSet(window.localStorage, CACHE_KEY, null); window.location.replace(window.location.pathname); }, 'btn--text'));
-  const hasMeta = Object.keys(state.library.meta ?? {}).length > 0;
-  foot.replaceChildren(
-    h('p', { text: left }),
-    right,
-    hasMeta && h('p', { class: 'credit', text: 'Filmdaten und Bilder von TMDB. Diese App nutzt die TMDB-API, ist aber nicht von TMDB unterstützt oder zertifiziert. Bewertungen von IMDb.' }),
-  );
-}
-
 // ---------- Ablauf ----------
 
 function render() {
   state.teardown?.();
   state.teardown = null;
   state.renderId += 1;
-  if (state.route.name === 'watch') renderWatch(state.route.id, state.renderId).then(renderFoot);
-  else if (state.route.name === 'title') renderTitle(state.route.key, state.renderId).then(renderFoot);
+  if (state.route.name === 'library') state.listHash = '#/';
+  else if (state.route.name === 'search') state.listHash = searchHash(state.route);
+  markTab();
+  if (state.route.name === 'watch') renderWatch(state.route.id, state.renderId);
+  else if (state.route.name === 'title') renderTitle(state.route.key, state.renderId);
+  else if (state.route.name === 'search') renderSearch();
+  else if (state.route.name === 'profile') renderProfile();
   else renderLibrary();
-  renderFoot();
 }
 
 async function refresh() {
   if (!state.source || state.loading) return;
-  const ok = await loadLibrary();
+  const pending = loadLibrary();
+  if (state.route.name === 'profile') renderProfile(); // zeigt "Lädt ..."
+  const ok = await pending;
   if (document.body.hasAttribute('data-locked')) return;
   render();
   if (ok) announce('Die Bibliothek ist aktuell.');
@@ -746,7 +955,7 @@ async function refresh() {
 
 async function boot() {
   state.route = parseRoute();
-  if (document.activeElement !== searchInput) searchInput.value = state.route.name === 'library' ? state.route.q : '';
+  markTab();
   view.replaceChildren(skeleton());
 
   const wantsDemo = new URLSearchParams(window.location.search).has('demo') || storageGet(window.sessionStorage, MODE_KEY) === 'demo';
@@ -779,27 +988,9 @@ async function boot() {
 window.addEventListener('hashchange', () => {
   if (document.body.hasAttribute('data-locked')) return;
   state.route = parseRoute();
-  if (document.activeElement !== searchInput) searchInput.value = state.route.name === 'library' ? state.route.q : '';
   render();
   window.scrollTo({ top: 0 });
 });
 window.addEventListener('pagehide', () => state.teardown?.());
-
-let searchTimer = null;
-searchForm.addEventListener('submit', (event) => event.preventDefault());
-searchInput.addEventListener('input', () => {
-  window.clearTimeout(searchTimer);
-  searchTimer = window.setTimeout(() => {
-    const q = searchInput.value;
-    if (state.route.name !== 'library') {
-      window.location.hash = libraryHash(q);
-      return;
-    }
-    window.history.replaceState(null, '', libraryHash(q));
-    state.route = { name: 'library', q };
-    renderLibrary();
-  }, 120);
-});
-refreshButton.addEventListener('click', refresh);
 
 boot();
