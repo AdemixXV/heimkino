@@ -2,11 +2,11 @@
 // Detailseite mit Beschreibung, IMDb-Bewertung, FSK, Trailer, Besetzung und ähnlichen Filmen, Suche mit
 // Genres, Abspielen mit Weiterschauen. Alles kommt direkt aus OneDrive, die Filmdaten aus
 // "heimkino-katalog.json" (erzeugt auf dem Laptop von scripts/film-infos.js).
-import { AuthError, completeLogin, hasSession, isConfigured, login, logout } from './auth.js?v=d911149a9d';
-import { announce, h } from './dom.js?v=d911149a9d';
-import { NBSP, formatBytes, formatDuration, initialOf, resolutionLabel } from './format.js?v=d911149a9d';
-import { SignInNeeded, demo, oneDrive } from './sources.js?v=d911149a9d';
-import { allProgress, clearProgress, getProgress, isFinished, isResumable, saveProgress } from './store.js?v=d911149a9d';
+import { AuthError, canSilentLogin, completeLogin, hasSession, isConfigured, login, logout } from './auth.js?v=e27880259f';
+import { announce, h } from './dom.js?v=e27880259f';
+import { NBSP, formatBytes, formatDuration, initialOf, resolutionLabel } from './format.js?v=e27880259f';
+import { SignInNeeded, demo, oneDrive } from './sources.js?v=e27880259f';
+import { allProgress, clearProgress, getProgress, isFinished, isResumable, saveProgress } from './store.js?v=e27880259f';
 
 const view = document.getElementById('view');
 const tabLinks = [...document.querySelectorAll('.tabs__link')];
@@ -1045,7 +1045,8 @@ function onKey(ctx, event) {
 
 // ---------- Anmelden ----------
 
-function showSignIn(message = '') {
+// auto: erst still erneuern (ohne Tippen), wenn jemand schon angemeldet war. Nach einem Fehlschlag auto: false, sonst gäbe es eine Schleife.
+function showSignIn(message = '', { auto = true } = {}) {
   state.teardown?.();
   state.teardown = null;
   document.body.dataset.locked = '';
@@ -1056,6 +1057,10 @@ function showSignIn(message = '') {
       text: 'Für die Verbindung fehlt noch die Anwendungs-ID von Microsoft (in handy-app/config.js). Bis dahin zeigt die Demo, wie die App aussieht.',
       actions: [button('Demo ansehen', startDemo)],
     }));
+    return;
+  }
+  if (auto && canSilentLogin()) {
+    renewSilently();
     return;
   }
   const signIn = button('Bei Microsoft anmelden', async (event) => {
@@ -1085,6 +1090,17 @@ function showSignIn(message = '') {
       ),
     ),
   );
+}
+
+// Microsoft kennt dich im Browser meist noch: Dann kommt die Anmeldung ohne Tippen zurück.
+// Geht das nicht (oder dauert es zu lange), erscheint der normale "Anmelden"-Knopf.
+function renewSilently() {
+  view.replaceChildren(signHead(), stateBlock({ title: 'Einen Moment ...', text: 'Die Anmeldung wird erneuert.' }));
+  const fallback = window.setTimeout(() => showSignIn('', { auto: false }), 8000);
+  login({ silent: true }).catch(() => {
+    window.clearTimeout(fallback);
+    showSignIn('', { auto: false });
+  });
 }
 
 function startDemo() {
@@ -1137,14 +1153,15 @@ async function boot() {
     storageSet(window.sessionStorage, MODE_KEY, 'demo');
     state.source = demo;
   } else {
+    let outcome = 'none';
     try {
-      await completeLogin();
+      outcome = await completeLogin();
     } catch (err) {
-      showSignIn(err instanceof AuthError ? err.message : 'Die Anmeldung hat nicht geklappt. Versuch es noch einmal.');
+      showSignIn(err instanceof AuthError ? err.message : 'Die Anmeldung hat nicht geklappt. Versuch es noch einmal.', { auto: false });
       return;
     }
     if (!isConfigured() || !hasSession()) {
-      showSignIn();
+      showSignIn('', { auto: outcome !== 'silent-failed' });
       return;
     }
     state.source = oneDrive;
