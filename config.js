@@ -5,5 +5,7 @@ export const CONFIG = {
   clientId: '5f381a7a-925b-4085-8dd3-847dcc39ba82', // App "Heimkino" im privaten Standardverzeichnis, nur persönliche Konten
   // Ordner in OneDrive, die als Bibliothek erscheinen (Pfad ab der obersten OneDrive-Ebene)
   // (Videos/Handy bewusst nicht: private Handy-Aufnahmen gehören nicht in die App)
-  folders: [{ path: 'Filme/Handy', label: 'Filme' }],
+  // Festes Bibliothekslaufwerk: Jedes Konto verwendet seinen eigenen Token.
+  // Die Kennung allein gewährt keinen Zugriff; OneDrive prüft die vorhandene Ordnerberechtigung.
+  folders: [{ driveId: 'A77EB828D51F3C89', itemId: 'A77EB828D51F3C89!sc9a46288a9f24f479216629c96a78728', path: 'Filme/Handy', label: 'Filme' }],
 };

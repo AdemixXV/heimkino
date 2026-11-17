@@ -2,11 +2,11 @@
 // Detailseite mit Beschreibung, IMDb-Bewertung, FSK, Trailer, Besetzung und ähnlichen Filmen, Suche mit
 // Genres, Abspielen mit Weiterschauen. Alles kommt direkt aus OneDrive, die Filmdaten aus
 // "heimkino-katalog.json" (erzeugt auf dem Laptop von scripts/film-infos.js).
-import { AuthError, canSilentLogin, completeLogin, hasSession, isConfigured, login, logout } from './auth.js?v=e27880259f';
-import { announce, h } from './dom.js?v=e27880259f';
-import { NBSP, formatBytes, formatDuration, initialOf, resolutionLabel } from './format.js?v=e27880259f';
-import { SignInNeeded, demo, oneDrive } from './sources.js?v=e27880259f';
-import { allProgress, clearProgress, getProgress, isFinished, isResumable, saveProgress } from './store.js?v=e27880259f';
+import { AuthError, canSilentLogin, completeLogin, hasSession, isConfigured, login, logout } from './auth.js?v=e7f7dbe501';
+import { announce, h } from './dom.js?v=e7f7dbe501';
+import { NBSP, formatBytes, formatDuration, initialOf, resolutionLabel } from './format.js?v=e7f7dbe501';
+import { LibraryAccessDenied, SignInNeeded, demo, oneDrive } from './sources.js?v=e7f7dbe501';
+import { allProgress, clearProgress, getProgress, isFinished, isResumable, saveProgress } from './store.js?v=e7f7dbe501';
 
 const view = document.getElementById('view');
 const tabLinks = [...document.querySelectorAll('.tabs__link')];
@@ -21,7 +21,7 @@ if (intro) {
 }
 
 const MODE_KEY = 'heimkino-handy:v1:mode';
-const CACHE_KEY = 'heimkino-handy:v2:library';
+const CACHE_KEY = 'heimkino-handy:v3:library';
 const collator = new Intl.Collator('de', { numeric: true, sensitivity: 'base' });
 
 const state = {
@@ -301,6 +301,10 @@ async function loadLibrary() {
     if (state.source === oneDrive) storageSet(window.localStorage, CACHE_KEY, JSON.stringify(state.library));
     return true;
   } catch (err) {
+    if (err instanceof LibraryAccessDenied) {
+      setLibrary(null);
+      storageSet(window.localStorage, CACHE_KEY, null);
+    }
     if (err instanceof SignInNeeded) {
       showSignIn('Die Anmeldung ist abgelaufen. Microsoft lässt Browser-Apps etwa einen Tag angemeldet, danach genügt ein Tippen.');
       return false;
@@ -547,7 +551,7 @@ function renderProfile() {
         ].filter(([, v]) => v).map(([label, value]) => h('div', {}, h('dt', { text: label }), h('dd', { text: value })))),
         'profile__card',
       ),
-      h('div', { class: 'actions' }, refreshButton, isDemo ? button('Demo beenden', endDemo, 'btn--quiet') : button('Abmelden', signOut, 'btn--quiet')),
+      h('div', { class: 'actions' }, refreshButton, !isDemo && button('Konto wechseln', switchAccount, 'btn--quiet'), isDemo ? button('Demo beenden', endDemo, 'btn--quiet') : button('Abmelden', signOut, 'btn--quiet')),
       hasMeta && h('p', { class: 'credit', text: 'Diese App nutzt die TMDB-API, ist aber nicht von TMDB unterstützt oder zertifiziert.' }),
     ),
   );
@@ -558,6 +562,13 @@ function skeleton() {
 }
 
 function errorState() {
+  if (state.error instanceof LibraryAccessDenied) {
+    return stateBlock({
+      title: 'Kein Zugriff auf die Bibliothek',
+      text: state.error.message,
+      actions: [button('Anderes Microsoft-Konto', switchAccount), button('Erneut prüfen', refresh, 'btn--quiet')],
+    });
+  }
   const offline = navigator.onLine === false;
   return stateBlock({
     title: offline ? 'Kein Internet' : 'OneDrive antwortet nicht',
@@ -572,6 +583,9 @@ async function ensureLibrary(token) {
   if (state.library) return true;
   view.replaceChildren(skeleton());
   await loadLibrary();
+  if (token === state.renderId && !state.library && state.error && !document.body.hasAttribute('data-locked')) {
+    view.replaceChildren(errorState());
+  }
   return token === state.renderId && Boolean(state.library);
 }
 
@@ -702,6 +716,19 @@ async function renderTitle(key, token) {
       ...sections,
     ),
   );
+}
+
+async function switchAccount(event) {
+  if (event?.currentTarget) event.currentTarget.disabled = true;
+  logout();
+  setLibrary(null);
+  state.account = '';
+  storageSet(window.localStorage, CACHE_KEY, null);
+  try {
+    await login();
+  } catch (err) {
+    showSignIn(err.message, { auto: false });
+  }
 }
 
 // Trailer von YouTube, erst beim Klick geladen (ohne Cookies: youtube-nocookie.com)
@@ -1083,7 +1110,7 @@ function showSignIn(message = '', { auto = true } = {}) {
           'div',
           { class: 'state state--center' },
           h('h1', { text: 'Mit OneDrive verbinden' }),
-          h('p', { text: 'Heimkino zeigt die Handy-Fassungen aus deinem OneDrive. Du meldest dich direkt bei Microsoft an, die App sieht dein Passwort nie und darf nur lesen.' }),
+          h('p', { text: 'Melde dich mit deinem privaten Microsoft-Konto an, das Zugriff auf den Bibliotheksordner hat. Die Anmeldung erfolgt direkt bei Microsoft. Heimkino sieht dein Passwort nie und darf nur lesen.' }),
           message && h('p', { class: 'help', dataset: { tone: 'error' }, role: 'alert', text: message }),
           h('div', { class: 'actions' }, signIn),
         ),
@@ -1165,6 +1192,7 @@ async function boot() {
       return;
     }
     state.source = oneDrive;
+    if (outcome === 'signed-in') storageSet(window.localStorage, CACHE_KEY, null);
     if (!state.library) setLibrary(readCache()); // sofort den letzten Stand zeigen, dann auffrischen
   }
 

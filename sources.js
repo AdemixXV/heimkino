@@ -1,28 +1,39 @@
 // Woher die Videos kommen: aus OneDrive (Microsoft Graph) oder, zum Ausprobieren, aus der Demo des Testservers.
 // Beide liefern dasselbe: eine Liste mit Einträgen für buildLibrary() und eine Abspieladresse pro Video.
-import { accessToken, AuthError } from './auth.js?v=e27880259f';
-import { CONFIG } from './config.js?v=e27880259f';
-import { buildLibrary } from './titles.js?v=e27880259f';
+import { accessToken, AuthError } from './auth.js?v=e7f7dbe501';
+import { CONFIG } from './config.js?v=e7f7dbe501';
+import { buildLibrary } from './titles.js?v=e7f7dbe501';
 
 const GRAPH = 'https://graph.microsoft.com/v1.0';
 const VIDEO_FILE = /\.(mp4|m4v|mov|webm)$/i;
 const CATALOG_NAME = 'heimkino-katalog.json';
 
 export class SignInNeeded extends Error {}
+export class LibraryAccessDenied extends Error {
+  constructor() {
+    super('Dieses Microsoft-Konto kann den Bibliotheksordner nicht öffnen. Prüfe den vorhandenen OneDrive-Zugriff oder melde dich mit einem anderen Konto an.');
+    this.name = 'LibraryAccessDenied';
+  }
+}
 
 const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 async function graph(path, { allowMissing = false } = {}) {
+  const url = new URL(path.startsWith('https://') ? path : `${GRAPH}${path}`);
+  if (url.origin !== 'https://graph.microsoft.com' || !url.pathname.startsWith('/v1.0/')) {
+    throw new Error('Ungültige Graph-Adresse.');
+  }
   let refreshed = false;
   for (let attempt = 0; attempt < 4; attempt += 1) {
     const token = await accessToken({ forceRefresh: refreshed });
     if (!token) throw new SignInNeeded('Bitte neu anmelden.');
-    const res = await fetch(path.startsWith('https://') ? path : `${GRAPH}${path}`, { headers: { Authorization: `Bearer ${token}` } });
+    const res = await fetch(url.href, { headers: { Authorization: `Bearer ${token}` }, redirect: 'error' });
     if (res.status === 401 && !refreshed) {
       refreshed = true; // Schlüssel abgelaufen: einmal erneuern
       continue;
     }
     if (res.status === 401) throw new SignInNeeded('Bitte neu anmelden.');
+    if (res.status === 403) throw new LibraryAccessDenied();
     if (res.status === 404 && allowMissing) return null;
     if ((res.status === 429 || res.status >= 500) && attempt < 3) {
       await pause(1500 * (attempt + 1)); // OneDrive ist kurz überlastet: kurz warten, dann noch einmal
@@ -47,16 +58,33 @@ function targetOf(item, fallbackDriveId = null) {
 }
 
 // "Filme/Handy" Stück für Stück auflösen, dabei Verknüpfungen folgen. null, wenn es den Ordner nicht gibt.
-async function resolveFolder(path) {
+async function resolveFolder(root) {
+  if (root.driveId) {
+    const path = root.path.split('/').filter(Boolean).map(encodeURIComponent).join('/');
+    const address = root.itemId
+      ? `/drives/${encodeURIComponent(root.driveId)}/items/${encodeURIComponent(root.itemId)}`
+      : `/drives/${encodeURIComponent(root.driveId)}/root:/${path}`;
+    const item = await graph(address, { allowMissing: true });
+    const target = item && targetOf(item, root.driveId);
+    if (!target?.folder || !target.driveId) throw new LibraryAccessDenied();
+    return target;
+  }
   let current = null;
-  for (const segment of path.split('/').filter(Boolean)) {
+  const base = root.driveId ? `/drives/${encodeURIComponent(root.driveId)}` : '/me/drive';
+  for (const segment of root.path.split('/').filter(Boolean)) {
     const url = current
       ? `/drives/${encodeURIComponent(current.driveId)}/items/${encodeURIComponent(current.id)}:/${encodeURIComponent(segment)}`
-      : `/me/drive/root:/${encodeURIComponent(segment)}`;
+      : `${base}/root:/${encodeURIComponent(segment)}`;
     const item = await graph(url, { allowMissing: true });
-    if (!item) return null;
-    current = targetOf(item, current?.driveId);
-    if (!current.folder || !current.driveId) return null;
+    if (!item) {
+      if (root.driveId) throw new LibraryAccessDenied();
+      return null;
+    }
+    current = targetOf(item, current?.driveId ?? root.driveId);
+    if (!current.folder || !current.driveId) {
+      if (root.driveId) throw new LibraryAccessDenied();
+      return null;
+    }
   }
   return current;
 }
@@ -131,7 +159,7 @@ export const oneDrive = {
 
     await Promise.all(
       CONFIG.folders.map(async (root, rootIndex) => {
-        const ref = await limit(() => resolveFolder(root.path));
+        const ref = await limit(() => resolveFolder(root));
         if (!ref) missing.push(root.path);
         else await walk(rootIndex, root, ref, []);
       }),
