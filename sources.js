@@ -1,8 +1,8 @@
 // Woher die Videos kommen: aus OneDrive (Microsoft Graph) oder, zum Ausprobieren, aus der Demo des Testservers.
 // Beide liefern dasselbe: eine Liste mit Einträgen für buildLibrary() und eine Abspieladresse pro Video.
-import { accessToken, AuthError } from './auth.js?v=996c9ca41f';
-import { CONFIG } from './config.js?v=996c9ca41f';
-import { buildLibrary } from './titles.js?v=996c9ca41f';
+import { accessToken, AuthError, sessionSignal, sessionVersion } from './auth.js?v=9cb729f848';
+import { CONFIG } from './config.js?v=9cb729f848';
+import { buildLibrary } from './titles.js?v=9cb729f848';
 
 const GRAPH = 'https://graph.microsoft.com/v1.0';
 const VIDEO_FILE = /\.(mp4|m4v|mov|webm)$/i;
@@ -18,16 +18,23 @@ export class LibraryAccessDenied extends Error {
 
 const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-async function graph(path, { allowMissing = false } = {}) {
+function requireSession(session) {
+  if (!session || sessionVersion() !== session) throw new SignInNeeded('Die Anmeldung wurde geändert. Bitte neu anmelden.');
+}
+
+async function graph(path, { allowMissing = false, session = sessionVersion() } = {}) {
   const url = new URL(path.startsWith('https://') ? path : `${GRAPH}${path}`);
   if (url.origin !== 'https://graph.microsoft.com' || !url.pathname.startsWith('/v1.0/')) {
     throw new Error('Ungültige Graph-Adresse.');
   }
   let refreshed = false;
   for (let attempt = 0; attempt < 4; attempt += 1) {
+    requireSession(session);
     const token = await accessToken({ forceRefresh: refreshed });
+    requireSession(session);
     if (!token) throw new SignInNeeded('Bitte neu anmelden.');
-    const res = await fetch(url.href, { headers: { Authorization: `Bearer ${token}` }, redirect: 'error' });
+    const res = await fetch(url.href, { headers: { Authorization: `Bearer ${token}` }, redirect: 'error', signal: sessionSignal() });
+    requireSession(session);
     if (res.status === 401 && !refreshed) {
       refreshed = true; // Schlüssel abgelaufen: einmal erneuern
       continue;
@@ -43,7 +50,9 @@ async function graph(path, { allowMissing = false } = {}) {
       const data = await res.json().catch(() => ({}));
       throw new Error(data.error?.message || `OneDrive antwortet mit Fehler ${res.status}.`);
     }
-    return res.json();
+    const data = await res.json();
+    requireSession(session);
+    return data;
   }
   throw new Error('OneDrive antwortet gerade nicht.');
 }
@@ -58,13 +67,13 @@ function targetOf(item, fallbackDriveId = null) {
 }
 
 // "Filme/Handy" Stück für Stück auflösen, dabei Verknüpfungen folgen. null, wenn es den Ordner nicht gibt.
-async function resolveFolder(root) {
+async function resolveFolder(root, request = graph) {
   if (root.driveId) {
     const path = root.path.split('/').filter(Boolean).map(encodeURIComponent).join('/');
     const address = root.itemId
       ? `/drives/${encodeURIComponent(root.driveId)}/items/${encodeURIComponent(root.itemId)}`
       : `/drives/${encodeURIComponent(root.driveId)}/root:/${path}`;
-    const item = await graph(address, { allowMissing: true });
+    const item = await request(address, { allowMissing: true });
     const target = item && targetOf(item, root.driveId);
     if (!target?.folder || !target.driveId) throw new LibraryAccessDenied();
     return target;
@@ -75,7 +84,7 @@ async function resolveFolder(root) {
     const url = current
       ? `/drives/${encodeURIComponent(current.driveId)}/items/${encodeURIComponent(current.id)}:/${encodeURIComponent(segment)}`
       : `${base}/root:/${encodeURIComponent(segment)}`;
-    const item = await graph(url, { allowMissing: true });
+    const item = await request(url, { allowMissing: true });
     if (!item) {
       if (root.driveId) throw new LibraryAccessDenied();
       return null;
@@ -119,6 +128,8 @@ export const oneDrive = {
   },
 
   async library() {
+    const session = sessionVersion();
+    const request = (path, options = {}) => graph(path, { ...options, session });
     const limit = limiter(4);
     const entries = [];
     const missing = [];
@@ -127,7 +138,7 @@ export const oneDrive = {
     async function walk(rootIndex, root, ref, parts) {
       let next = childrenUrl(ref);
       while (next) {
-        const page = await limit(() => graph(next));
+        const page = await limit(() => request(next));
         const folders = [];
         for (const item of page.value ?? []) {
           const target = targetOf(item, ref.driveId);
@@ -159,7 +170,7 @@ export const oneDrive = {
 
     await Promise.all(
       CONFIG.folders.map(async (root, rootIndex) => {
-        const ref = await limit(() => resolveFolder(root));
+        const ref = await limit(() => resolveFolder(root, request));
         if (!ref) missing.push(root.path);
         else await walk(rootIndex, root, ref, []);
       }),
@@ -170,7 +181,8 @@ export const oneDrive = {
     await Promise.all(
       catalogs.map(async ({ rootIndex, url }) => {
         try {
-          const res = await fetch(url);
+          requireSession(session);
+          const res = await fetch(url, { signal: sessionSignal() });
           if (!res.ok) return;
           const data = await res.json();
           for (const [key, value] of Object.entries(data.titles ?? {})) meta[`${rootIndex}|${key}`] = value;
@@ -179,6 +191,7 @@ export const oneDrive = {
         }
       }),
     );
+    requireSession(session);
     return { items: buildLibrary(entries), missing, meta };
   },
 

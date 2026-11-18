@@ -2,11 +2,11 @@
 // Detailseite mit Beschreibung, IMDb-Bewertung, FSK, Trailer, Besetzung und ähnlichen Filmen, Suche mit
 // Genres, Abspielen mit Weiterschauen. Alles kommt direkt aus OneDrive, die Filmdaten aus
 // "heimkino-katalog.json" (erzeugt auf dem Laptop von scripts/film-infos.js).
-import { AuthError, canSilentLogin, completeLogin, hasSession, isConfigured, login, logout } from './auth.js?v=996c9ca41f';
-import { announce, h } from './dom.js?v=996c9ca41f';
-import { NBSP, formatBytes, formatDuration, initialOf, resolutionLabel } from './format.js?v=996c9ca41f';
-import { LibraryAccessDenied, SignInNeeded, demo, oneDrive } from './sources.js?v=996c9ca41f';
-import { allProgress, clearProgress, getProgress, isFinished, isResumable, saveProgress } from './store.js?v=996c9ca41f';
+import { AuthError, canSilentLogin, completeLogin, hasSession, isConfigured, login, logout, onSessionChange } from './auth.js?v=9cb729f848';
+import { announce, h } from './dom.js?v=9cb729f848';
+import { NBSP, formatBytes, formatDuration, initialOf, resolutionLabel } from './format.js?v=9cb729f848';
+import { LibraryAccessDenied, SignInNeeded, demo, oneDrive } from './sources.js?v=9cb729f848';
+import { allProgress, clearProgress, configureProgress, getProgress, isFinished, isResumable, rememberQuality, saveProgress, watchedItems } from './progress.js?v=9cb729f848';
 
 const view = document.getElementById('view');
 const tabLinks = [...document.querySelectorAll('.tabs__link')];
@@ -34,14 +34,16 @@ const state = {
   route: { name: 'library' },
   listHash: '#/', // wohin "Zurück" auf der Detailseite führt: Startseite oder die letzte Suche
   teardown: null,
+  savePlayback: null,
   renderId: 0,
+  sessionId: 0,
 };
 
 // ---------- Kleine Helfer ----------
 
 function storageGet(storage, key) {
   try {
-    return storage.getItem(key);
+    return window[storage].getItem(key);
   } catch {
     return null;
   }
@@ -49,8 +51,8 @@ function storageGet(storage, key) {
 
 function storageSet(storage, key, value) {
   try {
-    if (value === null) storage.removeItem(key);
-    else storage.setItem(key, value);
+    if (value === null) window[storage].removeItem(key);
+    else window[storage].setItem(key, value);
   } catch {
     // Speicher gesperrt: geht auch ohne
   }
@@ -191,7 +193,7 @@ function episodeMeta(t, item) {
   return t.meta?.seasons?.[item.query?.season ?? 1]?.episodes?.[item.episode] ?? null;
 }
 
-// Jede HD-Fassung als eigenes abspielbares Video (eigener Fortschritt) mit den Angaben ihres Films
+// Beide Abspieladressen bleiben erreichbar, ihre Sehposition ist gemeinsam.
 const withHd = (items) => items.flatMap((i) => (i.hd ? [i, { ...i, ...i.hd, hd: null, isHd: true, base: i }] : [i]));
 const hdVersion = (item) => (item.hd ? { ...item, ...item.hd, hd: null, isHd: true, base: item } : null);
 
@@ -210,7 +212,7 @@ function episodeLabel(t, item) {
 // Was "Abspielen" startet: angefangenes Video, sonst die erste nicht gesehene Folge, sonst das erste.
 function nextItemOf(t) {
   const progress = allProgress();
-  const started = withHd(t.items).filter((i) => isResumable(progress[i.id])).sort((a, b) => progress[b.id].at - progress[a.id].at)[0];
+  const started = watchedItems(t.items).find((i) => isResumable(progress[i.id]));
   if (started) return started;
   return t.items.find((i) => !isFinished(progress[i.id])) ?? t.items[0];
 }
@@ -280,7 +282,7 @@ function searchText(t) {
 
 function readCache() {
   try {
-    const data = JSON.parse(storageGet(window.localStorage, CACHE_KEY) ?? 'null');
+    const data = JSON.parse(storageGet('localStorage', CACHE_KEY) ?? 'null');
     return data && Array.isArray(data.items) ? data : null;
   } catch {
     return null;
@@ -289,21 +291,26 @@ function readCache() {
 
 function setLibrary(library) {
   state.library = library;
+  configureProgress(library?.items ?? []);
   state.titles = library ? buildTitles(library) : [];
 }
 
 async function loadLibrary() {
+  const source = state.source;
+  const session = state.sessionId;
   state.loading = true;
   try {
-    const result = await state.source.library();
+    const result = await source.library();
+    if (session !== state.sessionId || source !== state.source) return false;
     setLibrary({ ...result, at: Date.now() });
     state.error = null;
-    if (state.source === oneDrive) storageSet(window.localStorage, CACHE_KEY, JSON.stringify(state.library));
+    if (state.source === oneDrive) storageSet('localStorage', CACHE_KEY, JSON.stringify(state.library));
     return true;
   } catch (err) {
+    if (session !== state.sessionId || source !== state.source) return false;
     if (err instanceof LibraryAccessDenied) {
       setLibrary(null);
-      storageSet(window.localStorage, CACHE_KEY, null);
+      storageSet('localStorage', CACHE_KEY, null);
     }
     if (err instanceof SignInNeeded) {
       showSignIn('Die Anmeldung ist abgelaufen. Microsoft lässt Browser-Apps etwa einen Tag angemeldet, danach genügt ein Tippen.');
@@ -312,7 +319,7 @@ async function loadLibrary() {
     state.error = err;
     return false;
   } finally {
-    state.loading = false;
+    if (session === state.sessionId) state.loading = false;
   }
 }
 
@@ -367,7 +374,7 @@ function row(title, cards, { more = null } = {}) {
 // Der Titel auf der Bühne: zuletzt angefangen, sonst der neueste mit Poster
 function pickFeature() {
   const progress = allProgress();
-  const resumeItem = withHd(state.library.items).filter((i) => isResumable(progress[i.id])).sort((a, b) => progress[b.id].at - progress[a.id].at)[0];
+  const resumeItem = watchedItems(state.library.items).find((i) => isResumable(progress[i.id]));
   const resumeTitle = resumeItem && titleOfItem(resumeItem);
   if (resumeTitle?.meta?.poster) return resumeTitle;
   const withArt = state.titles.filter((t) => t.meta?.poster).sort((a, b) => b.added - a.added);
@@ -409,7 +416,7 @@ function renderLibrary() {
   }
 
   const progress = allProgress();
-  const watched = withHd(state.library.items).filter((i) => progress[i.id]).sort((a, b) => progress[b.id].at - progress[a.id].at);
+  const watched = watchedItems(state.library.items);
   const resumable = watched.filter((i) => isResumable(progress[i.id])).slice(0, 12);
   const lastSeen = watched[0] && titleOfItem(watched[0]);
   const because = lastSeen ? similarTo(lastSeen) : [];
@@ -534,8 +541,9 @@ function renderProfile() {
   const refreshButton = button(state.loading ? 'Lädt ...' : 'Bibliothek aktualisieren', refresh);
   if (state.loading) refreshButton.setAttribute('aria-busy', 'true');
   const signOut = () => {
+    invalidateSession();
     logout();
-    storageSet(window.localStorage, CACHE_KEY, null);
+    storageSet('localStorage', CACHE_KEY, null);
     window.location.replace(window.location.pathname);
   };
   view.replaceChildren(
@@ -720,10 +728,11 @@ async function renderTitle(key, token) {
 
 async function switchAccount(event) {
   if (event?.currentTarget) event.currentTarget.disabled = true;
+  invalidateSession();
   logout();
   setLibrary(null);
   state.account = '';
-  storageSet(window.localStorage, CACHE_KEY, null);
+  storageSet('localStorage', CACHE_KEY, null);
   try {
     await login();
   } catch (err) {
@@ -767,6 +776,7 @@ async function renderWatch(id, token) {
   }
   const t = titleOfItem(item);
   const name = t?.name ?? item.title;
+  rememberQuality(item.id);
   document.title = `${name} | Heimkino`;
   const ctx = { item, t, video: null, media: h('div', { class: 'player__media' }), notice: h('p', { class: 'notice', 'aria-live': 'polite' }), resumed: false, retried: false, lastSave: 0, token };
   const following = nextInList(t, item.base ?? item);
@@ -813,15 +823,18 @@ async function renderWatch(id, token) {
   );
   ctx.onKey = (event) => onKey(ctx, event);
   document.addEventListener('keydown', ctx.onKey, true);
+  state.savePlayback = () => persist(ctx);
   state.teardown = () => {
     document.removeEventListener('keydown', ctx.onKey, true);
-    persist(ctx);
+    disposePlayer(ctx);
+    state.savePlayback = null;
   };
   await mountVideo(ctx, { autoplay: true });
 }
 
 async function mountVideo(ctx, { resumeAt = null, autoplay = false } = {}) {
   const { item, t } = ctx;
+  ctx.shouldPlay = autoplay;
   let url;
   try {
     url = await state.source.playUrl(item);
@@ -831,7 +844,7 @@ async function mountVideo(ctx, { resumeAt = null, autoplay = false } = {}) {
       showSignIn('Die Anmeldung ist abgelaufen. Danach geht es mit diesem Video weiter.');
       return;
     }
-    ctx.media.replaceChildren(panel({ title: 'Das Video lässt sich nicht laden', text: err.message, tone: 'error', actions: [button('Erneut versuchen', () => mountVideo(ctx))] }));
+    ctx.media.replaceChildren(panel({ title: 'Das Video lässt sich nicht laden', text: err.message, tone: 'error', actions: [button('Erneut versuchen', () => mountVideo(ctx, { resumeAt, autoplay }))] }));
     return;
   }
   if (ctx.token !== state.renderId) return;
@@ -860,8 +873,13 @@ async function mountVideo(ctx, { resumeAt = null, autoplay = false } = {}) {
       persist(ctx);
     }
   });
-  video.addEventListener('pause', () => persist(ctx));
+  video.addEventListener('play', () => { ctx.shouldPlay = true; });
+  video.addEventListener('pause', () => {
+    if (!video.error) ctx.shouldPlay = false;
+    persist(ctx);
+  });
   video.addEventListener('ended', () => {
+    ctx.shouldPlay = false;
     saveProgress(item.id, video.duration, video.duration);
     showNext(ctx);
   });
@@ -875,15 +893,25 @@ function persist(ctx) {
   if (v && Number.isFinite(v.duration) && v.currentTime > 0) saveProgress(ctx.item.id, v.currentTime, v.duration);
 }
 
+function disposePlayer(ctx) {
+  persist(ctx);
+  if (!ctx.video) return;
+  ctx.video.pause();
+  ctx.video.removeAttribute('src');
+  ctx.video.load();
+  ctx.video = null;
+}
+
 // Die Abspieladresse von OneDrive gilt nur etwa eine Stunde. Läuft sie während einer langen Pause ab,
 // wird einmal eine neue geholt und an derselben Stelle weitergemacht.
 function onVideoError(ctx) {
+  if (ctx.token !== state.renderId) return;
   const error = ctx.video?.error;
   if (!error || error.code === 1) return;
   const position = ctx.video.currentTime || getProgress(ctx.item.id)?.t || 0;
   if (!ctx.retried) {
     ctx.retried = true;
-    mountVideo(ctx, { resumeAt: position > 0 ? position : null, autoplay: position > 0 });
+    mountVideo(ctx, { resumeAt: position > 0 ? position : null, autoplay: Boolean(ctx.shouldPlay) });
     return;
   }
   ctx.video = null;
@@ -1074,6 +1102,7 @@ function onKey(ctx, event) {
 
 // auto: erst still erneuern (ohne Tippen), wenn jemand schon angemeldet war. Nach einem Fehlschlag auto: false, sonst gäbe es eine Schleife.
 function showSignIn(message = '', { auto = true } = {}) {
+  state.renderId += 1;
   state.teardown?.();
   state.teardown = null;
   document.body.dataset.locked = '';
@@ -1131,7 +1160,7 @@ function renewSilently() {
 }
 
 function startDemo() {
-  storageSet(window.sessionStorage, MODE_KEY, 'demo');
+  storageSet('sessionStorage', MODE_KEY, 'demo');
   state.source = demo;
   setLibrary(null);
   document.body.removeAttribute('data-locked');
@@ -1139,7 +1168,7 @@ function startDemo() {
 }
 
 function endDemo() {
-  storageSet(window.sessionStorage, MODE_KEY, null);
+  storageSet('sessionStorage', MODE_KEY, null);
   window.location.replace(window.location.pathname);
 }
 
@@ -1162,28 +1191,32 @@ function render() {
 
 async function refresh() {
   if (!state.source || state.loading) return;
+  const session = state.sessionId;
   const pending = loadLibrary();
   if (state.route.name === 'profile') renderProfile(); // zeigt "Lädt ..."
   const ok = await pending;
-  if (document.body.hasAttribute('data-locked')) return;
-  render();
+  if (session !== state.sessionId || document.body.hasAttribute('data-locked')) return;
+  renderAfterLibraryUpdate();
   if (ok) announce('Die Bibliothek ist aktuell.');
 }
 
 async function boot() {
+  const session = state.sessionId;
   state.route = parseRoute();
   markTab();
   view.replaceChildren(skeleton());
 
-  const wantsDemo = new URLSearchParams(window.location.search).has('demo') || storageGet(window.sessionStorage, MODE_KEY) === 'demo';
+  const wantsDemo = new URLSearchParams(window.location.search).has('demo') || storageGet('sessionStorage', MODE_KEY) === 'demo';
   if (wantsDemo) {
-    storageSet(window.sessionStorage, MODE_KEY, 'demo');
+    storageSet('sessionStorage', MODE_KEY, 'demo');
     state.source = demo;
   } else {
     let outcome = 'none';
     try {
       outcome = await completeLogin();
+      if (session !== state.sessionId) return;
     } catch (err) {
+      if (session !== state.sessionId) return;
       showSignIn(err instanceof AuthError ? err.message : 'Die Anmeldung hat nicht geklappt. Versuch es noch einmal.', { auto: false });
       return;
     }
@@ -1192,17 +1225,45 @@ async function boot() {
       return;
     }
     state.source = oneDrive;
-    if (outcome === 'signed-in') storageSet(window.localStorage, CACHE_KEY, null);
+    if (outcome === 'signed-in') storageSet('localStorage', CACHE_KEY, null);
     if (!state.library) setLibrary(readCache()); // sofort den letzten Stand zeigen, dann auffrischen
   }
 
   document.body.removeAttribute('data-locked');
   if (state.library) render();
   const ok = await loadLibrary();
-  if (document.body.hasAttribute('data-locked')) return;
-  if (ok) state.account = await state.source.account().catch(() => '');
+  if (session !== state.sessionId || document.body.hasAttribute('data-locked')) return;
+  if (ok) {
+    const account = await state.source.account().catch(() => '');
+    if (session !== state.sessionId || document.body.hasAttribute('data-locked')) return;
+    state.account = account;
+  }
+  renderAfterLibraryUpdate();
+}
+
+function renderAfterLibraryUpdate() {
+  if (state.route.name === 'watch' && state.teardown) return;
   render();
 }
+
+function invalidateSession() {
+  state.sessionId += 1;
+  state.renderId += 1;
+  state.teardown?.();
+  state.teardown = null;
+  state.source = null;
+  setLibrary(null);
+  state.account = '';
+  state.error = null;
+  state.loading = false;
+  storageSet('localStorage', CACHE_KEY, null);
+}
+
+onSessionChange(() => {
+  if (state.source === demo) return;
+  invalidateSession();
+  showSignIn('Die Anmeldung wurde in einem anderen Fenster geändert. Bitte hier erneut anmelden.', { auto: false });
+});
 
 window.addEventListener('hashchange', () => {
   if (document.body.hasAttribute('data-locked')) return;
@@ -1210,6 +1271,9 @@ window.addEventListener('hashchange', () => {
   render();
   window.scrollTo({ top: 0 });
 });
-window.addEventListener('pagehide', () => state.teardown?.());
+window.addEventListener('pagehide', (event) => {
+  if (event.persisted) state.savePlayback?.(); // BFCache stellt denselben Player samt Bedienung wieder her
+  else state.teardown?.();
+});
 
 boot();

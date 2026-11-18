@@ -4,7 +4,7 @@
 // Gelesen wird nur (Files.Read). Microsoft lässt Browser-Apps höchstens etwa 24 Stunden angemeldet.
 // Danach erneuert die App die Anmeldung still (prompt=none): Kennt Microsoft dich im Browser noch, kommt sie ohne
 // Tippen zurück. Nur wenn nicht, erscheint der "Anmelden"-Knopf. Wer sich selbst abmeldet, wird nicht still angemeldet.
-import { CONFIG } from './config.js?v=996c9ca41f';
+import { CONFIG } from './config.js?v=9cb729f848';
 
 const AUTHORITY = 'https://login.microsoftonline.com/consumers/oauth2/v2.0';
 const SCOPES = 'openid profile offline_access User.Read Files.Read';
@@ -52,8 +52,10 @@ function writeKey(key, value) {
   try {
     if (value === null) window.localStorage.removeItem(key);
     else window.localStorage.setItem(key, value);
+    return true;
   } catch {
     // Speicher gesperrt: dann gilt die Anmeldung nur, bis die Seite neu lädt
+    return false;
   }
 }
 
@@ -75,24 +77,72 @@ function load() {
 }
 
 function save(tokens) {
-  writeKey(TOKENS, JSON.stringify(tokens));
+  tokens = { ...tokens, session: tokens.session ?? randomText(16) };
+  memoryOnly = !writeKey(TOKENS, JSON.stringify(tokens));
   markSignedIn();
   memory = tokens;
 }
 
 let memory = null;
+let memoryOnly = false;
+let requestController = null;
+let requestSession = null;
+
+function currentTokens() {
+  return memoryOnly ? memory : load();
+}
+
+function identity(tokens) {
+  return tokens?.session ?? tokens?.refresh ?? tokens?.access ?? null;
+}
+
+export function sessionVersion() {
+  return identity(currentTokens());
+}
+
+export function sessionSignal() {
+  const session = sessionVersion();
+  if (!requestController || requestSession !== session) {
+    requestController?.abort();
+    requestController = new AbortController();
+    requestSession = session;
+  }
+  return requestController.signal;
+}
+
+// storage wird nur in den anderen Fenstern ausgelöst, nicht im auslösenden Tab.
+export function onSessionChange(listener) {
+  const parse = (value) => { try { return JSON.parse(value); } catch { return null; } };
+  const changed = (event) => {
+    if (event.storageArea && event.storageArea !== window.localStorage) return;
+    if (event.key !== TOKENS && event.key !== null) return;
+    const previous = event.key === null ? requestSession ?? identity(memory) : identity(parse(event.oldValue));
+    memory = null;
+    memoryOnly = false;
+    const next = sessionVersion();
+    if (previous === next) return; // normale Token-Erneuerung gehört weiter zum selben Konto
+    requestController?.abort();
+    requestController = null;
+    listener();
+  };
+  window.addEventListener('storage', changed);
+  return () => window.removeEventListener('storage', changed);
+}
 
 export function isConfigured() {
   return Boolean(CONFIG.clientId);
 }
 
 export function hasSession() {
-  return Boolean(memory ?? load());
+  return Boolean(currentTokens());
 }
 
 // Schlüssel vergessen, aber merken, dass jemand angemeldet war (für die stille Erneuerung)
 function forget() {
+  requestController?.abort();
+  requestController = null;
   memory = null;
+  memoryOnly = false;
   writeKey(TOKENS, null);
 }
 
@@ -139,11 +189,12 @@ export async function login({ silent = false } = {}) {
   window.location.assign(`${AUTHORITY}/authorize?${params}`);
 }
 
-async function tokenRequest(fields) {
+async function tokenRequest(fields, signal) {
   const res = await fetch(`${AUTHORITY}/token`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({ client_id: CONFIG.clientId, scope: SCOPES, ...fields }),
+    signal,
   });
   const data = await res.json().catch(() => ({}));
   if (!res.ok || !data.access_token) {
@@ -178,21 +229,27 @@ export async function completeLogin() {
   if (!pending || pending.state !== params.get('state')) {
     throw new AuthError('Diese Anmeldung gehört nicht zu diesem Fenster. Bitte noch einmal anmelden.');
   }
-  save(await tokenRequest({ grant_type: 'authorization_code', code: params.get('code'), code_verifier: pending.verifier, redirect_uri: redirectUri() }));
+  const session = sessionVersion();
+  const tokens = await tokenRequest({ grant_type: 'authorization_code', code: params.get('code'), code_verifier: pending.verifier, redirect_uri: redirectUri() }, sessionSignal());
+  if (sessionVersion() !== session) throw new AuthError('Die Anmeldung wurde in einem anderen Fenster geändert. Bitte erneut anmelden.');
+  save(tokens);
   return 'signed-in';
 }
 
 // Gültiger Zugangsschlüssel oder null (dann muss neu angemeldet werden).
 export async function accessToken({ forceRefresh = false } = {}) {
-  const tokens = memory ?? load();
+  const tokens = currentTokens();
   if (!tokens) return null;
   if (!forceRefresh && tokens.expiresAt > Date.now()) return tokens.access;
   if (!tokens.refresh) return null;
+  const session = identity(tokens);
   try {
-    const fresh = await tokenRequest({ grant_type: 'refresh_token', refresh_token: tokens.refresh });
-    save({ ...fresh, refresh: fresh.refresh ?? tokens.refresh });
+    const fresh = await tokenRequest({ grant_type: 'refresh_token', refresh_token: tokens.refresh }, sessionSignal());
+    if (sessionVersion() !== session) return null;
+    save({ ...fresh, refresh: fresh.refresh ?? tokens.refresh, session });
     return fresh.access;
   } catch (err) {
+    if (sessionVersion() !== session || err.name === 'AbortError') return null;
     if (err instanceof AuthError) {
       forget(); // abgelaufen: Schlüssel weg, aber "war angemeldet" bleibt, damit still erneuert werden kann
       return null;
