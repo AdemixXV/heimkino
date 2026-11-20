@@ -3,7 +3,7 @@
  * Baut auf style.css auf (Grundgerüst, Abstände, Zustände) und ersetzt dessen Farben und Schriften.
  * Schriften: nur was auf den Geräten schon da ist (schmale Grotesk für Überschriften, Schreibschrift fürs
  * Leuchtschild), es wird nichts nachgeladen. Poster behalten ihre eigenen Farben. */
-@import url("./style.css?v=9a4858d71e");
+@import url("./style.css?v=6b6cb6f493");
 
 :root {
   color-scheme: dark;
@@ -97,7 +97,7 @@ h1, h2, h3 { font-stretch: var(--display-stretch); }
   position: relative;
   display: block;
   border: var(--frame-w) solid var(--gold-mid);
-  border-image: url("./frame.svg?v=9a4858d71e") 32 / var(--frame-w) round;
+  border-image: url("./frame.svg?v=6b6cb6f493") 32 / var(--frame-w) round;
   background: var(--velvet-lo);
   box-shadow: 0 var(--space-xs) var(--space-lg) calc(-1 * var(--space-2xs)) var(--shadow-deep);
 }
@@ -224,6 +224,8 @@ h1, h2, h3 { font-stretch: var(--display-stretch); }
 .rail > li { scroll-snap-align: start; min-width: 0; }
 .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(var(--poster-w), 100%), 1fr)); gap: var(--space-lg) var(--space-md); margin: 0; padding: 0; list-style: none; }
 .grid > li { min-width: 0; }
+.rail:not(.rail--cast) > li, .grid > li { display: flex; flex-direction: column; }
+.rail:not(.rail--cast) > li > .poster, .grid > li > .poster { flex: 1; align-content: start; }
 
 .poster { display: grid; gap: var(--space-xs); color: inherit; text-decoration: none; }
 .poster .frame { transition: transform var(--dur-short) var(--ease-out); }
@@ -430,7 +432,7 @@ h1, h2, h3 { font-stretch: var(--display-stretch); }
 }
 
 .library-tools { display: flex; flex-wrap: wrap; justify-content: center; gap: var(--space-sm); margin-bottom: var(--space-lg); }
-.card-save { width: 100%; min-height: 44px; margin-top: var(--space-xs); padding-inline: var(--space-xs); }
+.card-save { width: 100%; height: 44px; min-height: 44px; flex-shrink: 0; margin-top: var(--space-xs); padding-inline: var(--space-xs); }
 .card-save[aria-pressed="true"] { color: var(--gold-hi); }
 .seen-label { color: var(--gold); font-size: var(--text-sm); }
 .card-options { margin-top: var(--space-xs); font-size: var(--text-sm); }
@@ -442,6 +444,9 @@ h1, h2, h3 { font-stretch: var(--display-stretch); }
 .episode__actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-sm); padding: var(--space-xs) var(--space-sm); }
 .collection > .page-title { margin-top: var(--space-lg); }
 .collection__grid { margin-top: var(--space-lg); }
+
+/* Scrollen bleibt erlaubt, Vergrößern per Touch-Geste nicht. */
+html { touch-action: pan-x pan-y; }
 
 /* Native Android-PiP: Das kleine Fenster zeigt ausschließlich den laufenden Film. */
 html.heimkino-native-pip, html.heimkino-native-pip body {
