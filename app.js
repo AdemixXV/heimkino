@@ -2,11 +2,12 @@
 // Detailseite mit Beschreibung, IMDb-Bewertung, FSK, Trailer, Besetzung und ähnlichen Filmen, Suche mit
 // Genres, Abspielen mit Weiterschauen. Alles kommt direkt aus OneDrive, die Filmdaten aus
 // "heimkino-katalog.json" (erzeugt auf dem Laptop von scripts/film-infos.js).
-import { AuthError, canSilentLogin, completeLogin, hasSession, isConfigured, login, logout, onSessionChange } from './auth.js?v=9cb729f848';
-import { announce, h } from './dom.js?v=9cb729f848';
-import { NBSP, formatBytes, formatDuration, initialOf, resolutionLabel } from './format.js?v=9cb729f848';
-import { LibraryAccessDenied, SignInNeeded, demo, oneDrive } from './sources.js?v=9cb729f848';
-import { allProgress, clearProgress, configureProgress, getProgress, isFinished, isResumable, rememberQuality, saveProgress, watchedItems } from './progress.js?v=9cb729f848';
+import { AuthError, canSilentLogin, completeLogin, hasSession, isConfigured, login, logout, onSessionChange } from './auth.js?v=9a4858d71e';
+import { announce, h } from './dom.js?v=9a4858d71e';
+import { NBSP, formatBytes, formatDuration, initialOf, resolutionLabel } from './format.js?v=9a4858d71e';
+import { LibraryAccessDenied, SignInNeeded, demo, oneDrive } from './sources.js?v=9a4858d71e';
+import { allProgress, clearProgress, configureProgress, getProgress, isFinished, isResumable, rememberQuality, saveProgress, watchedItems } from './progress.js?v=9a4858d71e';
+import { hideContinue, isHidden, isSaved, restoreContinue, savedKeys, seenOverride, setSeen, toggleSaved } from './library-state.js?v=9a4858d71e';
 
 const view = document.getElementById('view');
 const tabLinks = [...document.querySelectorAll('.tabs__link')];
@@ -37,6 +38,7 @@ const state = {
   savePlayback: null,
   renderId: 0,
   sessionId: 0,
+  listNotice: null,
 };
 
 // ---------- Kleine Helfer ----------
@@ -198,6 +200,7 @@ const withHd = (items) => items.flatMap((i) => (i.hd ? [i, { ...i, ...i.hd, hd: 
 const hdVersion = (item) => (item.hd ? { ...item, ...item.hd, hd: null, isHd: true, base: item } : null);
 
 function playLabel(t, item, progress) {
+  if (itemSeen(item)) return `Erneut abspielen${item.isHd ? ' in HD' : ''}`;
   if (isResumable(progress)) return `Weiter ab ${formatDuration(progress.t)}${item.isHd ? ' in HD' : ''}`;
   if (t.kind === 'tv' && item.episode !== null) return `Folge ${item.episode} abspielen`;
   return 'Abspielen';
@@ -212,9 +215,65 @@ function episodeLabel(t, item) {
 // Was "Abspielen" startet: angefangenes Video, sonst die erste nicht gesehene Folge, sonst das erste.
 function nextItemOf(t) {
   const progress = allProgress();
-  const started = watchedItems(t.items).find((i) => isResumable(progress[i.id]));
+  const started = watchedItems(t.items).find((i) => !itemSeen(i) && isResumable(progress[i.id]));
   if (started) return started;
-  return t.items.find((i) => !isFinished(progress[i.id])) ?? t.items[0];
+  return t.items.find((i) => !itemSeen(i)) ?? t.items[0];
+}
+
+function itemSeen(item) {
+  return seenOverride(item) ?? isFinished(getProgress(item.id));
+}
+
+function continuedItems(items) {
+  return watchedItems(items).filter((item) => !isHidden(item) && !itemSeen(item) && isResumable(getProgress(item.id)));
+}
+
+function listNotice() {
+  const notice = state.listNotice;
+  return notice && h('div', { class: 'notice container list-notice', role: 'status' },
+    h('span', { text: notice.text }), button('Rückgängig', () => {
+      notice.undo(); state.listNotice = null; render(); announce('Änderung rückgängig gemacht.');
+    }, 'btn--small btn--quiet'));
+}
+
+function removeContinueItem(item) {
+  hideContinue(item);
+  state.listNotice = { text: 'Aus Weitersehen entfernt. Deine Sehposition bleibt gespeichert.', undo: () => restoreContinue(item) };
+  render();
+  announce(state.listNotice.text);
+}
+
+function seenButton(item) {
+  const seen = itemSeen(item);
+  return button(seen ? 'Als ungesehen markieren' : 'Als gesehen markieren', () => {
+    const previous = seenOverride(item);
+    setSeen(item, !seen);
+    state.listNotice = { text: seen ? 'Als ungesehen markiert.' : 'Als gesehen markiert.', undo: () => setSeen(item, previous) };
+    render(); announce(state.listNotice.text);
+  }, 'btn--small btn--quiet');
+}
+
+function saveButton(t, compact = false) {
+  const label = (saved, small = compact) => small ? (saved ? '✓ Gemerkt' : '+ Merken') : (saved ? '✓ Auf meiner Liste' : '+ Meine Liste');
+  const saved = isSaved(t.key);
+  return h('button', { type: 'button', class: `btn btn--quiet${compact ? ' btn--small card-save' : ''}`,
+    dataset: { saveKey: t.key, compact: String(compact) },
+    'aria-pressed': String(saved), 'aria-label': `${label(saved)}: ${t.name}`,
+    text: label(saved), onclick: (event) => {
+      const active = toggleSaved(t.key);
+      if (state.route.name === 'watchlist' && !active) {
+        renderCollection('watchlist', state.renderId).then(() => document.getElementById('collection-heading')?.focus());
+      } else {
+        for (const target of document.querySelectorAll('[data-save-key]')) {
+          if (target.dataset.saveKey !== t.key) continue;
+          const text = label(active, target.dataset.compact === 'true');
+          target.textContent = text;
+          target.setAttribute('aria-pressed', String(active));
+          target.setAttribute('aria-label', `${text}: ${t.name}`);
+        }
+      }
+      announce(active ? `${t.name} wurde gemerkt.` : `${t.name} wurde aus Meine Liste entfernt.`);
+    } });
 }
 
 // ---------- Adresse ----------
@@ -229,6 +288,8 @@ function parseRoute() {
   if (title) return { name: 'title', key: decodeURIComponent(title[1]) };
   if (path === '/suchen' || params.get('q')) return { name: 'search', q: params.get('q') ?? '', genre: params.get('genre') ?? '' };
   if (path === '/profil') return { name: 'profile' };
+  if (path === '/meine-liste') return { name: 'watchlist' };
+  if (path === '/weitersehen') return { name: 'continue' };
   return { name: 'library' };
 }
 
@@ -327,7 +388,7 @@ async function loadLibrary() {
 
 function posterCard(t) {
   const progress = allProgress();
-  const started = t.items.find((i) => isResumable(progress[i.id]));
+  const started = t.items.find((i) => !itemSeen(i) && isResumable(progress[i.id]));
   const facts = [t.year && h('li', { text: String(t.year) }), ratingItem(t.meta)].filter(Boolean);
   return h(
     'li',
@@ -338,7 +399,9 @@ function posterCard(t) {
       framed(art(posterOf(t), initialOf(t.name), {}, started && meter(progress[started.id]))),
       h('h3', { class: 'poster__title', text: t.name }),
       facts.length > 0 && h('ul', { class: 'facts' }, facts),
+      t.items.every(itemSeen) && h('span', { class: 'seen-label', text: '✓ Gesehen' }),
     ),
+    saveButton(t, true),
   );
 }
 
@@ -358,6 +421,8 @@ function continueCard(item) {
       h('h3', { class: 'poster__title', text: t?.name ?? item.title }),
       label && h('ul', { class: 'facts' }, h('li', { text: label })),
     ),
+    h('details', { class: 'card-options' }, h('summary', { text: 'Optionen', 'aria-label': `Optionen für ${t?.name ?? item.title}` }),
+      h('div', { class: 'card-options__body' }, seenButton(item), button('Aus Weitersehen entfernen', () => removeContinueItem(item), 'btn--small btn--quiet'))),
   );
 }
 
@@ -374,7 +439,7 @@ function row(title, cards, { more = null } = {}) {
 // Der Titel auf der Bühne: zuletzt angefangen, sonst der neueste mit Poster
 function pickFeature() {
   const progress = allProgress();
-  const resumeItem = watchedItems(state.library.items).find((i) => isResumable(progress[i.id]));
+  const resumeItem = continuedItems(state.library.items)[0];
   const resumeTitle = resumeItem && titleOfItem(resumeItem);
   if (resumeTitle?.meta?.poster) return resumeTitle;
   const withArt = state.titles.filter((t) => t.meta?.poster).sort((a, b) => b.added - a.added);
@@ -396,6 +461,7 @@ function feature(t) {
       { class: 'actions' },
       linkButton(playLabel(t, next, progress), watchHash(next.id), 'btn--play', PLAY_ICON()),
       linkButton('Mehr Infos', titleHash(t.key), 'btn--quiet'),
+      saveButton(t),
     ),
   );
 }
@@ -417,7 +483,8 @@ function renderLibrary() {
 
   const progress = allProgress();
   const watched = watchedItems(state.library.items);
-  const resumable = watched.filter((i) => isResumable(progress[i.id])).slice(0, 12);
+  const resumable = continuedItems(state.library.items).slice(0, 12);
+  const saved = savedKeys().map(titleByKey).filter(Boolean);
   const lastSeen = watched[0] && titleOfItem(watched[0]);
   const because = lastSeen ? similarTo(lastSeen) : [];
   const recent = [...state.titles].sort((a, b) => b.added - a.added).slice(0, 12);
@@ -431,9 +498,12 @@ function renderLibrary() {
 
   const parts = [
     signHead({ heading: true }),
+    h('nav', { class: 'container library-tools', 'aria-label': 'Deine Listen' }, linkButton('Meine Liste', '#/meine-liste', 'btn--small btn--quiet'), linkButton('Alle unter Weitersehen', '#/weitersehen', 'btn--small btn--quiet')),
+    listNotice(),
     feature(pickFeature()),
     ...notices,
-    resumable.length > 0 && row('Weitersehen', resumable.map(continueCard)),
+    resumable.length > 0 && row('Weitersehen', resumable.map(continueCard), { more: '#/weitersehen' }),
+    saved.length > 0 && row('Meine Liste', saved.slice(0, 12).map(posterCard), { more: '#/meine-liste' }),
     because.length > 0 && row(`Weil du „${lastSeen.name}“ geschaut hast`, because.map(posterCard)),
     state.titles.length > 6 && row('Neu hinzugefügt', recent.map(posterCard)),
     series.length > 0 && row('Serien', series.map(posterCard)),
@@ -446,6 +516,24 @@ function renderLibrary() {
     ),
   ];
   view.replaceChildren(...parts.filter(Boolean));
+}
+
+async function renderCollection(kind, token) {
+  if (!(await ensureLibrary(token))) return;
+  const saved = kind === 'watchlist';
+  const name = saved ? 'Meine Liste' : 'Weitersehen';
+  const items = saved ? savedKeys().map(titleByKey).filter(Boolean) : continuedItems(state.library.items);
+  document.title = `${name} | Heimkino`;
+  view.replaceChildren(h('section', { class: 'page container collection' },
+    linkButton('Zur Startseite', '#/', 'btn--small btn--quiet'),
+    h('h1', { class: 'page-title', id: 'collection-heading', tabindex: '-1', text: name }),
+    h('p', { class: 'notice', text: saved ? 'Für später gemerkt. Deine Liste bleibt auf diesem Gerät gespeichert.' : `${items.length} angefangene ${items.length === 1 ? 'Wiedergabe' : 'Wiedergaben'}. Unter Optionen kannst du aufräumen; deine Sehposition bleibt erhalten.` }),
+    listNotice(),
+    items.length ? h('ul', { class: 'grid collection__grid' }, items.map(saved ? posterCard : continueCard)) :
+      h('div', { class: 'state' }, h('h2', { text: saved ? 'Noch nichts gemerkt' : 'Alles aufgeräumt' }),
+        h('p', { text: saved ? 'Tippe bei einem Film oder einer Serie auf „+ Merken“ oder „+ Meine Liste“.' : 'Hier erscheinen deine angefangenen Filme und Folgen.' }),
+        linkButton('Filme entdecken', '#/')),
+  ));
 }
 
 // ---------- Suchen ----------
@@ -551,6 +639,7 @@ function renderProfile() {
       'div',
       { class: 'page container profile' },
       h('h1', { class: 'page-title', text: 'Profil' }),
+      h('div', { class: 'actions' }, linkButton('Meine Liste', '#/meine-liste', 'btn--quiet'), linkButton('Alle unter Weitersehen', '#/weitersehen', 'btn--quiet')),
       framed(
         h('dl', { class: 'filedata' }, [
           ['Konto', isDemo ? 'Demo' : state.account || 'Microsoft-Konto'],
@@ -608,7 +697,7 @@ async function renderTitle(key, token) {
   const meta = t.meta ?? {};
   const next = nextItemOf(t);
   const progress = getProgress(next.id);
-  const resumable = isResumable(progress);
+  const resumable = !itemSeen(next) && isResumable(progress);
 
   const facts = [
     ratingItem(meta, { long: true }),
@@ -620,6 +709,9 @@ async function renderTitle(key, token) {
   ].filter(Boolean);
 
   const actions = [linkButton(playLabel(t, next, progress), watchHash(next.id), 'btn--play', PLAY_ICON())];
+  actions.push(saveButton(t));
+  if (t.kind !== 'tv') actions.push(seenButton(next));
+  if (isHidden(next)) actions.push(button('Wieder unter Weitersehen anzeigen', () => { restoreContinue(next); render(); announce('Wieder unter Weitersehen sichtbar.'); }, 'btn--quiet'));
   if (resumable) actions.push(button('Von Anfang', () => { clearProgress(next.id); window.location.hash = watchHash(next.id); }, 'btn--quiet'));
   // Zweite Fassung: HD, wenn es eine gibt, oder zurück zur normalen, wenn gerade die HD-Fassung läuft
   if (next.isHd) actions.push(linkButton('In 720p abspielen', watchHash(next.base.id), 'btn--quiet'));
@@ -650,6 +742,7 @@ async function renderTitle(key, token) {
                 framed(art(image, String(item.episode ?? ''), {}, meter(all[item.id]))),
                 h('div', { class: 'episode__body' }, h('h3', { class: 'episode__title', text: episodeLabel(t, item) }), minutes > 0 && h('ul', { class: 'facts' }, h('li', { text: runtimeLabel(minutes) })), em?.overview && h('p', { class: 'episode__text', text: em.overview })),
               ),
+              h('div', { class: 'episode__actions' }, itemSeen(item) && h('span', { class: 'seen-label', text: '✓ Gesehen' }), seenButton(item), isHidden(item) && button('Wieder unter Weitersehen anzeigen', () => { restoreContinue(item); render(); }, 'btn--small btn--quiet')),
             );
           }),
         ),
@@ -700,7 +793,8 @@ async function renderTitle(key, token) {
     h(
       'article',
       { class: 'detail' },
-      h('div', { class: 'container detail__top' }, h('a', { class: 'btn btn--small btn--quiet back', href: state.listHash, text: state.listHash.startsWith('#/suchen') ? 'Zur Suche' : 'Zur Startseite' })),
+      h('div', { class: 'container detail__top' }, h('a', { class: 'btn btn--small btn--quiet back', href: state.listHash, text: state.listHash === '#/meine-liste' ? 'Zu Meine Liste' : state.listHash === '#/weitersehen' ? 'Zu Weitersehen' : state.listHash.startsWith('#/suchen') ? 'Zur Suche' : 'Zur Startseite' })),
+      listNotice(),
       h(
         'header',
         { class: 'container detail__head' },
@@ -829,12 +923,13 @@ async function renderWatch(id, token) {
     disposePlayer(ctx);
     state.savePlayback = null;
   };
-  await mountVideo(ctx, { autoplay: true });
+  await mountVideo(ctx, { resumeAt: itemSeen(item) ? 0 : null, autoplay: true });
 }
 
 async function mountVideo(ctx, { resumeAt = null, autoplay = false } = {}) {
   const { item, t } = ctx;
   ctx.shouldPlay = autoplay;
+  ctx.resumeAt = resumeAt;
   let url;
   try {
     url = await state.source.playUrl(item);
@@ -874,6 +969,10 @@ async function mountVideo(ctx, { resumeAt = null, autoplay = false } = {}) {
     }
   });
   video.addEventListener('play', () => { ctx.shouldPlay = true; });
+  video.addEventListener('playing', () => {
+    restoreContinue(item);
+    setSeen(item, null);
+  });
   video.addEventListener('pause', () => {
     if (!video.error) ctx.shouldPlay = false;
     persist(ctx);
@@ -908,10 +1007,10 @@ function onVideoError(ctx) {
   if (ctx.token !== state.renderId) return;
   const error = ctx.video?.error;
   if (!error || error.code === 1) return;
-  const position = ctx.video.currentTime || getProgress(ctx.item.id)?.t || 0;
+  const position = ctx.video.currentTime > 0 ? ctx.video.currentTime : (ctx.resumeAt ?? getProgress(ctx.item.id)?.t ?? 0);
   if (!ctx.retried) {
     ctx.retried = true;
-    mountVideo(ctx, { resumeAt: position > 0 ? position : null, autoplay: Boolean(ctx.shouldPlay) });
+    mountVideo(ctx, { resumeAt: position, autoplay: Boolean(ctx.shouldPlay) });
     return;
   }
   ctx.video = null;
@@ -920,7 +1019,7 @@ function onVideoError(ctx) {
       title: 'Das Video lässt sich nicht abspielen',
       text: error.code === 4 ? 'Dieses Format kennt der Browser nicht. Die Handy-Fassungen sind MP4 mit H.264, die laufen überall.' : 'Die Verbindung ist abgebrochen. Prüfe das Netz und versuch es noch einmal.',
       tone: 'error',
-      actions: [button('Noch einmal versuchen', () => { ctx.retried = false; mountVideo(ctx, { resumeAt: position > 0 ? position : null, autoplay: true }); })],
+      actions: [button('Noch einmal versuchen', () => { ctx.retried = false; mountVideo(ctx, { resumeAt: position, autoplay: true }); })],
     }),
   );
 }
@@ -1179,6 +1278,8 @@ function render() {
   state.teardown = null;
   state.renderId += 1;
   if (state.route.name === 'library') state.listHash = '#/';
+  else if (state.route.name === 'watchlist') state.listHash = '#/meine-liste';
+  else if (state.route.name === 'continue') state.listHash = '#/weitersehen';
   else if (state.route.name === 'search') state.listHash = searchHash(state.route);
   document.body.dataset.view = state.route.name;
   markTab();
@@ -1186,6 +1287,7 @@ function render() {
   else if (state.route.name === 'title') renderTitle(state.route.key, state.renderId);
   else if (state.route.name === 'search') renderSearch();
   else if (state.route.name === 'profile') renderProfile();
+  else if (state.route.name === 'watchlist' || state.route.name === 'continue') renderCollection(state.route.name, state.renderId);
   else renderLibrary();
 }
 
@@ -1268,6 +1370,7 @@ onSessionChange(() => {
 window.addEventListener('hashchange', () => {
   if (document.body.hasAttribute('data-locked')) return;
   state.route = parseRoute();
+  state.listNotice = null;
   render();
   window.scrollTo({ top: 0 });
 });

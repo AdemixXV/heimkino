@@ -3,7 +3,7 @@
  * Baut auf style.css auf (Grundgerüst, Abstände, Zustände) und ersetzt dessen Farben und Schriften.
  * Schriften: nur was auf den Geräten schon da ist (schmale Grotesk für Überschriften, Schreibschrift fürs
  * Leuchtschild), es wird nichts nachgeladen. Poster behalten ihre eigenen Farben. */
-@import url("./style.css?v=9cb729f848");
+@import url("./style.css?v=9a4858d71e");
 
 :root {
   color-scheme: dark;
@@ -97,7 +97,7 @@ h1, h2, h3 { font-stretch: var(--display-stretch); }
   position: relative;
   display: block;
   border: var(--frame-w) solid var(--gold-mid);
-  border-image: url("./frame.svg?v=9cb729f848") 32 / var(--frame-w) round;
+  border-image: url("./frame.svg?v=9a4858d71e") 32 / var(--frame-w) round;
   background: var(--velvet-lo);
   box-shadow: 0 var(--space-xs) var(--space-lg) calc(-1 * var(--space-2xs)) var(--shadow-deep);
 }
@@ -428,6 +428,20 @@ h1, h2, h3 { font-stretch: var(--display-stretch); }
 @media (prefers-reduced-motion: reduce) {
   .poster .frame, .tile .frame, .feature__link .frame, .ticket { transition: none; }
 }
+
+.library-tools { display: flex; flex-wrap: wrap; justify-content: center; gap: var(--space-sm); margin-bottom: var(--space-lg); }
+.card-save { width: 100%; min-height: 44px; margin-top: var(--space-xs); padding-inline: var(--space-xs); }
+.card-save[aria-pressed="true"] { color: var(--gold-hi); }
+.seen-label { color: var(--gold); font-size: var(--text-sm); }
+.card-options { margin-top: var(--space-xs); font-size: var(--text-sm); }
+.card-options summary { min-height: 44px; display: flex; align-items: center; justify-content: center; cursor: pointer; color: var(--gold); border: 1px solid var(--gold-dim, #86622c); border-radius: 6px; }
+.card-options summary:focus-visible { outline: 2px solid var(--gold-hi); outline-offset: 2px; }
+.card-options__body { display: grid; gap: var(--space-xs); padding-top: var(--space-xs); }
+.card-options__body .btn { min-height: 44px; white-space: normal; padding-inline: var(--space-xs); font-size: var(--text-sm); }
+.list-notice { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-sm); }
+.episode__actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-sm); padding: var(--space-xs) var(--space-sm); }
+.collection > .page-title { margin-top: var(--space-lg); }
+.collection__grid { margin-top: var(--space-lg); }
 
 /* Native Android-PiP: Das kleine Fenster zeigt ausschließlich den laufenden Film. */
 html.heimkino-native-pip, html.heimkino-native-pip body {
