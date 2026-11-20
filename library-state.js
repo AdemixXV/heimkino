@@ -3,6 +3,7 @@ const KEY = 'heimkino-handy:v1:lists';
 const empty = () => ({ saved: [], hidden: [], seen: {} });
 let memory = empty();
 let memoryOnly = false;
+let titleAliases = new Map();
 const itemKey = (item) => item.base?.id ?? item.id;
 
 function read() {
@@ -26,10 +27,18 @@ function write(data) {
   } catch { memoryOnly = true; }
 }
 
-export const savedKeys = () => read().saved;
-export const isSaved = (key) => savedKeys().includes(key);
+export function configureTitleAliases(titles) {
+  titleAliases = new Map();
+  for (const title of titles) for (const alias of title.aliases ?? []) titleAliases.set(alias, title.key);
+}
+const titleKey = (key) => titleAliases.get(key) ?? key;
+const normalizedSaved = (keys) => [...new Set(keys.map(titleKey))];
+export const savedKeys = () => normalizedSaved(read().saved);
+export const isSaved = (key) => savedKeys().includes(titleKey(key));
 export function toggleSaved(key) {
   const data = read();
+  key = titleKey(key);
+  data.saved = normalizedSaved(data.saved);
   const saved = !data.saved.includes(key);
   data.saved = saved ? [key, ...data.saved] : data.saved.filter((value) => value !== key);
   write(data);

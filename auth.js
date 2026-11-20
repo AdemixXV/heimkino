@@ -4,7 +4,7 @@
 // Gelesen wird nur (Files.Read). Microsoft lässt Browser-Apps höchstens etwa 24 Stunden angemeldet.
 // Danach erneuert die App die Anmeldung still (prompt=none): Kennt Microsoft dich im Browser noch, kommt sie ohne
 // Tippen zurück. Nur wenn nicht, erscheint der "Anmelden"-Knopf. Wer sich selbst abmeldet, wird nicht still angemeldet.
-import { CONFIG } from './config.js?v=6b6cb6f493';
+import { CONFIG } from './config.js?v=6714e49546';
 
 const AUTHORITY = 'https://login.microsoftonline.com/consumers/oauth2/v2.0';
 const SCOPES = 'openid profile offline_access User.Read Files.Read';

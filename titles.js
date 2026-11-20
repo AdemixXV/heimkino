@@ -17,6 +17,7 @@ const RELEASE_WORD = new RegExp(
 );
 const VIDEO_EXT = /\.(mp4|m4v|mkv|mov|avi|webm|ts|mts|m2ts|wmv|flv|mpg|mpeg|vob|3gp)$/i;
 const SEASON_EPISODE = /^s(\d{1,2})(?:e(\d{1,3}))?$/i;
+const EPISODE_MARK = /(?:^|[._\s-])(?:s(\d{1,2})(?:[._\s-]*e(\d{1,3}))?|(\d{1,2})x(\d{1,3})|(?:staffel|season)[._\s-]*(\d{1,2})(?:[._\s-]*(?:folge|episode)[._\s-]*(\d{1,3}))?|(?:folge|episode)[._\s-]*(\d{1,3}))(?=$|[._\s-])/i;
 const YEAR = /^(19|20)\d\d$/;
 
 function tidyCase(text) {
@@ -46,11 +47,16 @@ function joinInitials(words) {
 
 export function parseName(raw) {
   const base = String(raw ?? '').replace(VIDEO_EXT, '').trim();
-  const tokens = base.split(/[._\s]+/).filter(Boolean);
+  let marker = EPISODE_MARK.exec(base);
+  // "Star Wars Episode 1" ist ein Filmtitel; bloßes "Episode 1" im Serienordner bleibt erkennbar.
+  if (marker?.[7] && /episode/i.test(marker[0]) && base.slice(0, marker.index).trim()) marker = null;
+  const tokens = (marker ? base.slice(0, marker.index) : base).split(/[._\s]+/).filter(Boolean);
   const words = [];
   let year = null;
-  let season = null;
-  let episode = null;
+  const seasonNumber = marker?.[1] ?? marker?.[3] ?? marker?.[5];
+  const episodeNumber = marker?.[2] ?? marker?.[4] ?? marker?.[6] ?? marker?.[7];
+  let season = seasonNumber === undefined ? null : Number(seasonNumber);
+  let episode = episodeNumber === undefined ? null : Number(episodeNumber);
   let stoppedAt = -1; // Index des ersten technischen Worts
   for (const [index, token] of tokens.entries()) {
     const se = SEASON_EPISODE.exec(token);
@@ -86,6 +92,23 @@ const HD_MARK = /\s*\(HD\)(?=\.[^.]+$)/i;
 export const isHdName = (name) => HD_MARK.test(name);
 const pairKey = (entry) => `${entry.rootIndex}|${entry.parts.slice(0, -1).join('/')}|${entry.parts.at(-1).replace(HD_MARK, '').replace(/\.[^.]+$/, '').toLowerCase()}`;
 
+function seriesOf(entry) {
+  const dirs = entry.parts.slice(0, -1).map(parseName);
+  const file = parseName(entry.parts.at(-1));
+  const candidates = [file, ...dirs.slice().reverse()];
+  const marked = candidates.filter((part) => part.season !== null || part.episode !== null);
+  if (!marked.length) return null;
+  const named = (part) => !/^(?:s\d|\d+x\d|(?:staffel|season|folge|episode)[._\s-]*\d|filme$|serien$|series$|videos$|handy$|disc\s*\d|disk\s*\d)/i.test(part.name);
+  const show = marked.find(named) ?? dirs.slice().reverse().find(named);
+  if (!show) return null;
+  const year = show.year ?? candidates.find((part) => part.year !== null && part.name.toLowerCase() === show.name.toLowerCase())?.year ?? null;
+  return {
+    name: show.name, year,
+    season: candidates.find((part) => part.season !== null)?.season ?? 1,
+    episode: candidates.find((part) => part.episode !== null)?.episode ?? null,
+  };
+}
+
 export function buildLibrary(allEntries) {
   // HD-Fassungen mit passender normaler Fassung zählen nicht als eigenes Video, sie hängen an ihr (item.hd)
   const plain = new Map(allEntries.filter((e) => !isHdName(e.parts.at(-1))).map((e) => [pairKey(e), e]));
@@ -105,6 +128,7 @@ export function buildLibrary(allEntries) {
     }
   }
   const countOf = (entry, depth) => counts.get(`${entry.rootIndex}|${entry.parts.slice(0, depth).join('/')}`) ?? 0;
+  const series = new Map(entries.map((entry) => [entry, seriesOf(entry)]));
 
   const items = entries.map((entry) => {
     const dirs = entry.parts.slice(0, -1);
@@ -133,14 +157,22 @@ export function buildLibrary(allEntries) {
       if (folder.episode !== null) episode = folder.episode;
       else if (score(folder) >= score(file)) chosen = folder;
     }
+    const detected = series.get(entry);
+    if (detected) {
+      episode = detected.episode;
+      collection = `${detected.name}${detected.year ? ` (${detected.year})` : ''}, Staffel ${detected.season}`;
+    }
     const title = episode !== null ? `Folge ${episode}` : chosen.title;
 
     // Schlüssel für die Filmdaten (Katalog): ein Film ist sein oberster Ordner (oder die Datei selbst),
     // eine Serie ist der Ordner ihres Regals. Danach sucht das Laptop-Skript bei TMDB.
     const isSeries = collectionDepth > 0;
     const seriesFolder = isSeries ? parseName(dirs[collectionDepth - 1]) : null;
-    const metaKey = isSeries ? dirs.slice(0, collectionDepth).join('/') : entry.parts[0];
-    const query = isSeries
+    const legacyKey = isSeries ? dirs.slice(0, collectionDepth).join('/') : entry.parts[0];
+    const metaKey = detected ? `@series/${encodeURIComponent(detected.name.normalize('NFKC').toLowerCase())}/${detected.year ?? 'unknown'}` : legacyKey;
+    const query = detected
+      ? { kind: 'tv', name: detected.name, year: detected.year, season: detected.season }
+      : isSeries
       ? { kind: 'tv', name: seriesFolder.name, year: seriesFolder.year, season: seriesFolder.season ?? file.season ?? null }
       : { kind: 'movie', name: chosen.name, year: chosen.year };
 
@@ -151,6 +183,7 @@ export function buildLibrary(allEntries) {
       collection,
       episode,
       metaKey: `${entry.rootIndex}|${metaKey}`,
+      legacyMetaKeys: metaKey === legacyKey ? [] : [`${entry.rootIndex}|${legacyKey}`],
       query,
       rootIndex: entry.rootIndex,
       size: entry.size ?? 0,

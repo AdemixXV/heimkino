@@ -2,12 +2,12 @@
 // Detailseite mit Beschreibung, IMDb-Bewertung, FSK, Trailer, Besetzung und ähnlichen Filmen, Suche mit
 // Genres, Abspielen mit Weiterschauen. Alles kommt direkt aus OneDrive, die Filmdaten aus
 // "heimkino-katalog.json" (erzeugt auf dem Laptop von scripts/film-infos.js).
-import { AuthError, canSilentLogin, completeLogin, hasSession, isConfigured, login, logout, onSessionChange } from './auth.js?v=6b6cb6f493';
-import { announce, h } from './dom.js?v=6b6cb6f493';
-import { NBSP, formatBytes, formatDuration, initialOf, resolutionLabel } from './format.js?v=6b6cb6f493';
-import { LibraryAccessDenied, SignInNeeded, demo, oneDrive } from './sources.js?v=6b6cb6f493';
-import { allProgress, clearProgress, configureProgress, getProgress, isFinished, isResumable, rememberQuality, saveProgress, watchedItems } from './progress.js?v=6b6cb6f493';
-import { hideContinue, isHidden, isSaved, restoreContinue, savedKeys, seenOverride, setSeen, toggleSaved } from './library-state.js?v=6b6cb6f493';
+import { AuthError, canSilentLogin, completeLogin, hasSession, isConfigured, login, logout, onSessionChange } from './auth.js?v=6714e49546';
+import { announce, h } from './dom.js?v=6714e49546';
+import { NBSP, formatBytes, formatDuration, initialOf, resolutionLabel } from './format.js?v=6714e49546';
+import { LibraryAccessDenied, SignInNeeded, demo, oneDrive } from './sources.js?v=6714e49546';
+import { allProgress, clearProgress, configureProgress, getProgress, isFinished, isResumable, rememberQuality, saveProgress, watchedItems } from './progress.js?v=6714e49546';
+import { configureTitleAliases, hideContinue, isHidden, isSaved, restoreContinue, savedKeys, seenOverride, setSeen, toggleSaved } from './library-state.js?v=6714e49546';
 
 const view = document.getElementById('view');
 const tabLinks = [...document.querySelectorAll('.tabs__link')];
@@ -22,7 +22,7 @@ if (intro) {
 }
 
 const MODE_KEY = 'heimkino-handy:v1:mode';
-const CACHE_KEY = 'heimkino-handy:v3:library';
+const CACHE_KEY = 'heimkino-handy:v4:library';
 const collator = new Intl.Collator('de', { numeric: true, sensitivity: 'base' });
 
 const state = {
@@ -166,14 +166,16 @@ function buildTitles(library) {
   for (const item of library.items) {
     let title = map.get(item.metaKey);
     if (!title) {
-      const meta = library.meta?.[item.metaKey] ?? null;
-      const kind = meta?.kind ?? (item.query?.kind === 'tv' ? 'tv' : 'movie');
+      const candidates = [item.metaKey, ...(item.legacyMetaKeys ?? [])].map((key) => library.meta?.[key]).filter(Boolean);
+      const meta = (item.query?.kind === 'tv' ? candidates.find((candidate) => candidate.kind === 'tv') : candidates[0]) ?? null;
+      const kind = item.query?.kind === 'tv' ? 'tv' : (meta?.kind ?? 'movie');
       // Ohne Filmdaten: Name aus dem Ordner, das Jahr steht getrennt daneben
       const fallbackName = kind === 'tv' ? (item.query?.name ?? item.collection) : (item.query?.name || item.title);
-      title = { key: item.metaKey, meta, kind, items: [], fallbackName, fallbackYear: item.query?.year ?? null, added: 0 };
+      title = { key: item.metaKey, aliases: [], meta, kind, items: [], fallbackName, fallbackYear: item.query?.year ?? null, added: 0 };
       map.set(item.metaKey, title);
     }
     title.items.push(item);
+    title.aliases.push(...(item.legacyMetaKeys ?? []).filter((key) => !title.aliases.includes(key)));
     title.added = Math.max(title.added, Date.parse(item.modified ?? '') || 0);
   }
   const titles = [...map.values()];
@@ -185,7 +187,7 @@ function buildTitles(library) {
   return titles.sort((a, b) => collator.compare(a.name, b.name));
 }
 
-const titleByKey = (key) => state.titles.find((t) => t.key === key);
+const titleByKey = (key) => state.titles.find((t) => t.key === key || t.aliases?.includes(key));
 const titleOfItem = (item) => state.titles.find((t) => t.key === item.metaKey);
 const posterOf = (t) => t.meta?.poster ?? t.items[0]?.thumb ?? null;
 const backdropOf = (t) => t.meta?.backdrop ?? t.items[0]?.thumb ?? null;
@@ -354,6 +356,7 @@ function setLibrary(library) {
   state.library = library;
   configureProgress(library?.items ?? []);
   state.titles = library ? buildTitles(library) : [];
+  configureTitleAliases(state.titles);
 }
 
 async function loadLibrary() {
