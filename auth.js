@@ -4,10 +4,11 @@
 // Gelesen wird nur (Files.Read). Microsoft lässt Browser-Apps höchstens etwa 24 Stunden angemeldet.
 // Danach erneuert die App die Anmeldung still (prompt=none): Kennt Microsoft dich im Browser noch, kommt sie ohne
 // Tippen zurück. Nur wenn nicht, erscheint der "Anmelden"-Knopf. Wer sich selbst abmeldet, wird nicht still angemeldet.
-import { CONFIG } from './config.js?v=6714e49546';
+import { CONFIG } from './config.js?v=2efb4cb9fe';
 
 const AUTHORITY = 'https://login.microsoftonline.com/consumers/oauth2/v2.0';
-const SCOPES = 'openid profile offline_access User.Read Files.Read';
+const SCOPES = 'offline_access User.Read Files.Read';
+const WRITE_SCOPES = `${SCOPES} Files.ReadWrite`;
 const TOKENS = 'heimkino-handy:v1:tokens';
 const PENDING = 'heimkino-handy:v1:pending-login';
 const SIGNED_IN = 'heimkino-handy:v1:signed-in'; // "1": war angemeldet und hat sich nicht selbst abgemeldet
@@ -81,6 +82,15 @@ function save(tokens) {
   memoryOnly = !writeKey(TOKENS, JSON.stringify(tokens));
   markSignedIn();
   memory = tokens;
+  notifyNative();
+}
+
+function notifyNative() {
+  if (typeof window.dispatchEvent === 'function') window.dispatchEvent(new Event('heimkino-auth-changed'));
+}
+
+export function canWriteBoard() {
+  return /(^|\s)(https:\/\/graph\.microsoft\.com\/)?Files\.ReadWrite(\s|$)/i.test(currentTokens()?.scope ?? '');
 }
 
 let memory = null;
@@ -123,6 +133,7 @@ export function onSessionChange(listener) {
     if (previous === next) return; // normale Token-Erneuerung gehört weiter zum selben Konto
     requestController?.abort();
     requestController = null;
+    notifyNative();
     listener();
   };
   window.addEventListener('storage', changed);
@@ -144,6 +155,7 @@ function forget() {
   memory = null;
   memoryOnly = false;
   writeKey(TOKENS, null);
+  notifyNative();
 }
 
 // Der Nutzer meldet sich selbst ab: Dann wird nicht mehr still angemeldet.
@@ -166,11 +178,12 @@ export function canSilentLogin(now = Date.now()) {
 
 // silent: Microsoft darf nichts anzeigen (prompt=none). Es kommt entweder die Anmeldung zurück oder ein Fehler,
 // den completeLogin() als "silent-failed" meldet.
-export async function login({ silent = false } = {}) {
+export async function login({ silent = false, boardWrite = false } = {}) {
+  const scope = boardWrite ? WRITE_SCOPES : SCOPES;
   const verifier = randomText(48);
   const state = randomText(16);
   try {
-    window.sessionStorage.setItem(PENDING, JSON.stringify({ verifier, state, hash: window.location.hash, silent }));
+    window.sessionStorage.setItem(PENDING, JSON.stringify({ verifier, state, hash: window.location.hash, silent, boardWrite }));
   } catch {
     throw new AuthError('Dieser Browser erlaubt keinen Speicher (privates Fenster?). Die Anmeldung braucht ihn kurz.');
   }
@@ -179,7 +192,7 @@ export async function login({ silent = false } = {}) {
     response_type: 'code',
     response_mode: 'query',
     redirect_uri: redirectUri(),
-    scope: SCOPES,
+    scope,
     state,
     code_challenge: await challengeFor(verifier),
     code_challenge_method: 'S256',
@@ -189,11 +202,11 @@ export async function login({ silent = false } = {}) {
   window.location.assign(`${AUTHORITY}/authorize?${params}`);
 }
 
-async function tokenRequest(fields, signal) {
+async function tokenRequest(fields, signal, scope = SCOPES) {
   const res = await fetch(`${AUTHORITY}/token`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({ client_id: CONFIG.clientId, scope: SCOPES, ...fields }),
+    body: new URLSearchParams({ client_id: CONFIG.clientId, scope, ...fields }),
     signal,
   });
   const data = await res.json().catch(() => ({}));
@@ -203,6 +216,7 @@ async function tokenRequest(fields, signal) {
   return {
     access: data.access_token,
     refresh: data.refresh_token ?? null,
+    scope: typeof data.scope === 'string' ? data.scope : scope,
     expiresAt: Date.now() + Math.max(60, Number(data.expires_in ?? 3600) - 120) * 1000,
   };
 }
@@ -230,7 +244,7 @@ export async function completeLogin() {
     throw new AuthError('Diese Anmeldung gehört nicht zu diesem Fenster. Bitte noch einmal anmelden.');
   }
   const session = sessionVersion();
-  const tokens = await tokenRequest({ grant_type: 'authorization_code', code: params.get('code'), code_verifier: pending.verifier, redirect_uri: redirectUri() }, sessionSignal());
+  const tokens = await tokenRequest({ grant_type: 'authorization_code', code: params.get('code'), code_verifier: pending.verifier, redirect_uri: redirectUri() }, sessionSignal(), pending.boardWrite ? WRITE_SCOPES : SCOPES);
   if (sessionVersion() !== session) throw new AuthError('Die Anmeldung wurde in einem anderen Fenster geändert. Bitte erneut anmelden.');
   save(tokens);
   return 'signed-in';
@@ -244,7 +258,7 @@ export async function accessToken({ forceRefresh = false } = {}) {
   if (!tokens.refresh) return null;
   const session = identity(tokens);
   try {
-    const fresh = await tokenRequest({ grant_type: 'refresh_token', refresh_token: tokens.refresh }, sessionSignal());
+    const fresh = await tokenRequest({ grant_type: 'refresh_token', refresh_token: tokens.refresh }, sessionSignal(), /(^|\s)(https:\/\/graph\.microsoft\.com\/)?Files\.ReadWrite(\s|$)/i.test(tokens.scope ?? '') ? WRITE_SCOPES : SCOPES);
     if (sessionVersion() !== session) return null;
     save({ ...fresh, refresh: fresh.refresh ?? tokens.refresh, session });
     return fresh.access;

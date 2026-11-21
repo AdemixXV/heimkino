@@ -2,12 +2,13 @@
 // Detailseite mit Beschreibung, IMDb-Bewertung, FSK, Trailer, Besetzung und ähnlichen Filmen, Suche mit
 // Genres, Abspielen mit Weiterschauen. Alles kommt direkt aus OneDrive, die Filmdaten aus
 // "heimkino-katalog.json" (erzeugt auf dem Laptop von scripts/film-infos.js).
-import { AuthError, canSilentLogin, completeLogin, hasSession, isConfigured, login, logout, onSessionChange } from './auth.js?v=6714e49546';
-import { announce, h } from './dom.js?v=6714e49546';
-import { NBSP, formatBytes, formatDuration, initialOf, resolutionLabel } from './format.js?v=6714e49546';
-import { LibraryAccessDenied, SignInNeeded, demo, oneDrive } from './sources.js?v=6714e49546';
-import { allProgress, clearProgress, configureProgress, getProgress, isFinished, isResumable, rememberQuality, saveProgress, watchedItems } from './progress.js?v=6714e49546';
-import { configureTitleAliases, hideContinue, isHidden, isSaved, restoreContinue, savedKeys, seenOverride, setSeen, toggleSaved } from './library-state.js?v=6714e49546';
+import { AuthError, canSilentLogin, completeLogin, hasSession, isConfigured, login, logout, onSessionChange } from './auth.js?v=2efb4cb9fe';
+import { announce, h } from './dom.js?v=2efb4cb9fe';
+import { NBSP, formatBytes, formatDuration, initialOf, resolutionLabel } from './format.js?v=2efb4cb9fe';
+import { LibraryAccessDenied, SignInNeeded, demo, oneDrive } from './sources.js?v=2efb4cb9fe';
+import { allProgress, clearProgress, configureProgress, getProgress, isFinished, isResumable, rememberQuality, saveProgress, watchedItems } from './progress.js?v=2efb4cb9fe';
+import { configureTitleAliases, hideContinue, isHidden, isSaved, restoreContinue, savedKeys, seenOverride, setSeen, toggleSaved } from './library-state.js?v=2efb4cb9fe';
+import { mountBoard } from './board-view.js?v=2efb4cb9fe';
 
 const view = document.getElementById('view');
 const tabLinks = [...document.querySelectorAll('.tabs__link')];
@@ -290,6 +291,7 @@ function parseRoute() {
   if (title) return { name: 'title', key: decodeURIComponent(title[1]) };
   if (path === '/suchen' || params.get('q')) return { name: 'search', q: params.get('q') ?? '', genre: params.get('genre') ?? '' };
   if (path === '/profil') return { name: 'profile' };
+  if (path === '/filmwuensche') return { name: 'board' };
   if (path === '/meine-liste') return { name: 'watchlist' };
   if (path === '/weitersehen') return { name: 'continue' };
   return { name: 'library' };
@@ -308,7 +310,7 @@ const watchHash = (id) => `#/watch/${encodeURIComponent(id)}`;
 // Die Leiste unten zeigt, wo man ist. Detailseite und Abspielen gehören zum Bereich, aus dem man kam.
 function markTab() {
   const from = state.listHash.startsWith('#/suchen') ? 'search' : 'library';
-  const current = { library: 'library', search: 'search', profile: 'profile' }[state.route.name] ?? from;
+  const current = { library: 'library', search: 'search', profile: 'profile', board: 'profile' }[state.route.name] ?? from;
   for (const link of tabLinks) {
     if (link.dataset.tab === current) link.setAttribute('aria-current', 'page');
     else link.removeAttribute('aria-current');
@@ -642,7 +644,7 @@ function renderProfile() {
       'div',
       { class: 'page container profile' },
       h('h1', { class: 'page-title', text: 'Profil' }),
-      h('div', { class: 'actions' }, linkButton('Meine Liste', '#/meine-liste', 'btn--quiet'), linkButton('Alle unter Weitersehen', '#/weitersehen', 'btn--quiet')),
+      h('div', { class: 'actions' }, linkButton('Meine Liste', '#/meine-liste', 'btn--quiet'), linkButton('Alle unter Weitersehen', '#/weitersehen', 'btn--quiet'), linkButton('Filmwünsche', '#/filmwuensche', 'btn--quiet')),
       framed(
         h('dl', { class: 'filedata' }, [
           ['Konto', isDemo ? 'Demo' : state.account || 'Microsoft-Konto'],
@@ -1290,6 +1292,13 @@ function render() {
   else if (state.route.name === 'title') renderTitle(state.route.key, state.renderId);
   else if (state.route.name === 'search') renderSearch();
   else if (state.route.name === 'profile') renderProfile();
+  else if (state.route.name === 'board') {
+    document.title = 'Filmwünsche | Heimkino';
+    const token = state.renderId;
+    const mounted = mountBoard({ isDemo: state.source === demo, isCurrent: () => token === state.renderId });
+    view.replaceChildren(mounted.element);
+    state.teardown = mounted.dispose;
+  }
   else if (state.route.name === 'watchlist' || state.route.name === 'continue') renderCollection(state.route.name, state.renderId);
   else renderLibrary();
 }
@@ -1348,6 +1357,7 @@ async function boot() {
 
 function renderAfterLibraryUpdate() {
   if (state.route.name === 'watch' && state.teardown) return;
+  if (state.route.name === 'board' && state.teardown) return;
   render();
 }
 
