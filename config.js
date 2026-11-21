@@ -8,4 +8,7 @@ export const CONFIG = {
   // Festes Bibliothekslaufwerk: Jedes Konto verwendet seinen eigenen Token.
   // Die Kennung allein gewährt keinen Zugriff; OneDrive prüft die vorhandene Ordnerberechtigung.
   folders: [{ driveId: 'A77EB828D51F3C89', itemId: 'A77EB828D51F3C89!sc9a46288a9f24f479216629c96a78728', path: 'Filme/Handy', label: 'Filme' }],
+  // Ein gemeinsames Wünsche-Brett im ausdrücklich gewählten eigenen Konto.
+  // Bleibt beim Kontowechsel derselbe Ordner; OneDrive prüft dessen Freigabe.
+  board: { driveId: 'f23e81c0222b88b4' },
 };

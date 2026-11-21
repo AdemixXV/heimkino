@@ -1,5 +1,5 @@
-import { accessToken, sessionSignal, sessionVersion } from './auth.js?v=2efb4cb9fe';
-import { CONFIG } from './config.js?v=2efb4cb9fe';
+import { accessToken, sessionSignal, sessionVersion } from './auth.js?v=d94fdd8440';
+import { CONFIG } from './config.js?v=d94fdd8440';
 
 const GRAPH = 'https://graph.microsoft.com/v1.0';
 export const BOARD_NAME = 'Heimkino-Wuensche';
@@ -107,7 +107,7 @@ export function createBoardClient({ driveId, token = accessToken, session = sess
   };
 }
 
-export const board = createBoardClient({ driveId: CONFIG.folders[0].driveId });
+export const board = createBoardClient({ driveId: CONFIG.board.driveId });
 
 export function setBoardNotifications(value) {
   try {
