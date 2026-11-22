@@ -1,6 +1,6 @@
-import { h, announce } from './dom.js?v=5ad2108893';
-import { canWriteBoard, login, sessionVersion } from './auth.js?v=5ad2108893';
-import { board, BOARD_NAME, NOTIFY_KEY, setBoardNotifications } from './board.js?v=5ad2108893';
+import { h, announce } from './dom.js?v=1c4067d8b2';
+import { canWriteBoard, login, sessionVersion } from './auth.js?v=1c4067d8b2';
+import { board, BOARD_NAME, NOTIFY_KEY, setBoardNotifications } from './board.js?v=1c4067d8b2';
 
 const btn = (text, onclick, quiet = false) => h('button', { type: 'button', class: `btn${quiet ? ' btn--quiet' : ''}`, text, onclick });
 const sameId = (a, b) => Boolean(a && b && a.toLowerCase() === b.toLowerCase());
@@ -59,9 +59,10 @@ export function mountBoard({ isDemo = false, isCurrent = () => true } = {}) {
     } }, h('h2', { text: 'Dein Filmwunsch' }), h('label', { for: 'wish-title', text: 'Filmtitel' }), title,
       h('label', { for: 'wish-text', text: 'Nachricht (optional)' }), text,
       !canWriteBoard() && h('p', { class: 'help', text: 'Beim ersten Beitrag fragt Microsoft nach Schreibrechten. Diese gelten technisch für deine OneDrive-Dateien einschließlich Ändern und Löschen. Heimkino bearbeitet ausschließlich den Wünsche-Ordner.' }), submit);
-    const enabled = notifyConfig()?.session === sessionVersion();
     const native = window.heimkinoNotifications;
+    const enabled = notifyConfig()?.session === sessionVersion() && native?.enabled !== false && native?.permissionGranted !== false;
     const notifications = h('section', { class: 'panel' }, h('h2', { text: 'Benachrichtigungen' }),
+      typeof native?.permissionGranted === 'boolean' && h('p', { text: native.permissionGranted ? 'Android erlaubt Benachrichtigungen für Heimkino.' : 'Android blockiert Benachrichtigungen für Heimkino oder den Kanal Filmwünsche.' }),
       h('p', { text: native ? 'Prüft bei geschlossener App frühestens etwa alle 15 Minuten. Android kann länger warten. Bei abgelaufener Microsoft-Anmeldung pausieren Meldungen bis zur erneuten Anmeldung.' : 'Handy-Benachrichtigungen sind in der Heimkino-APK verfügbar. Hier siehst du neue Wünsche beim Aktualisieren.' }),
       native && btn(enabled ? 'Benachrichtigungen ausschalten' : 'Benachrichtigungen einschalten', (event) => act(event, async () => {
         if (enabled) { setBoardNotifications(null); native.disable(); }
@@ -96,9 +97,16 @@ export function mountBoard({ isDemo = false, isCurrent = () => true } = {}) {
   }
   const onNative = (event) => {
     if (!current()) return;
+    const detail = event.detail ?? {};
+    if (window.heimkinoNotifications) Object.assign(window.heimkinoNotifications, detail);
     if (event.detail?.enabled === false) {
-      setBoardNotifications(null);
-      message.textContent = 'Benachrichtigungen sind aus. Du kannst sie hier erneut einschalten und am Handy erlauben.';
+      const messages = {
+        permission: 'Android blockiert Benachrichtigungen. Erlaube sie für Heimkino und den Kanal Filmwünsche.',
+        'background-error': 'Die Hintergrundprüfung konnte nicht eingerichtet werden. Bitte erneut einschalten.',
+        session: 'Bitte erneut anmelden, um die Benachrichtigungen für dieses Konto einzuschalten.',
+        off: 'Die Wünsche-Benachrichtigungen sind in Heimkino ausgeschaltet.',
+      };
+      message.textContent = messages[detail.reason] ?? messages['background-error'];
     } else message.textContent = 'Benachrichtigungen sind eingeschaltet.';
     if (info) draw();
   };
