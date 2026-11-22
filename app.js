@@ -2,13 +2,13 @@
 // Detailseite mit Beschreibung, IMDb-Bewertung, FSK, Trailer, Besetzung und ähnlichen Filmen, Suche mit
 // Genres, Abspielen mit Weiterschauen. Alles kommt direkt aus OneDrive, die Filmdaten aus
 // "heimkino-katalog.json" (erzeugt auf dem Laptop von scripts/film-infos.js).
-import { AuthError, canSilentLogin, completeLogin, hasSession, isConfigured, login, logout, onSessionChange } from './auth.js?v=d94fdd8440';
-import { announce, h } from './dom.js?v=d94fdd8440';
-import { NBSP, formatBytes, formatDuration, initialOf, resolutionLabel } from './format.js?v=d94fdd8440';
-import { LibraryAccessDenied, SignInNeeded, demo, oneDrive } from './sources.js?v=d94fdd8440';
-import { allProgress, clearProgress, configureProgress, getProgress, isFinished, isResumable, rememberQuality, saveProgress, watchedItems } from './progress.js?v=d94fdd8440';
-import { configureTitleAliases, hideContinue, isHidden, isSaved, restoreContinue, savedKeys, seenOverride, setSeen, toggleSaved } from './library-state.js?v=d94fdd8440';
-import { mountBoard } from './board-view.js?v=d94fdd8440';
+import { AuthError, canSilentLogin, completeLogin, hasSession, isConfigured, login, logout, onSessionChange } from './auth.js?v=4dc25edf96';
+import { announce, h } from './dom.js?v=4dc25edf96';
+import { NBSP, formatBytes, formatDuration, initialOf, resolutionLabel } from './format.js?v=4dc25edf96';
+import { LibraryAccessDenied, SignInNeeded, demo, oneDrive } from './sources.js?v=4dc25edf96';
+import { allProgress, clearProgress, configureProgress, getProgress, isFinished, isResumable, rememberQuality, saveProgress, watchedItems } from './progress.js?v=4dc25edf96';
+import { configureTitleAliases, hideContinue, isHidden, isSaved, restoreContinue, savedKeys, seenOverride, setSeen, toggleSaved } from './library-state.js?v=4dc25edf96';
+import { mountBoard } from './board-view.js?v=4dc25edf96';
 
 const view = document.getElementById('view');
 const tabLinks = [...document.querySelectorAll('.tabs__link')];

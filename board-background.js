@@ -1,4 +1,4 @@
-import { accessToken, sessionVersion } from './auth.js?v=d94fdd8440';
+import { accessToken, sessionVersion } from './auth.js?v=4dc25edf96';
 
 // Executed in a real first-party WebView, so SPA refresh uses the supported browser/CORS flow.
 // Native code receives only the short-lived access token; refresh tokens stay in web storage.

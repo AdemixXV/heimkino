@@ -1,5 +1,5 @@
-import { accessToken, sessionSignal, sessionVersion } from './auth.js?v=d94fdd8440';
-import { CONFIG } from './config.js?v=d94fdd8440';
+import { accessToken, sessionSignal, sessionVersion } from './auth.js?v=4dc25edf96';
+import { CONFIG } from './config.js?v=4dc25edf96';
 
 const GRAPH = 'https://graph.microsoft.com/v1.0';
 export const BOARD_NAME = 'Heimkino-Wuensche';
@@ -14,7 +14,7 @@ export function validateWish(title, text = '') {
   return { version: 1, title, text };
 }
 
-export function createBoardClient({ driveId, token = accessToken, session = sessionVersion, signal = sessionSignal, fetcher = (...args) => fetch(...args) }) {
+export function createBoardClient({ driveId, itemId = null, token = accessToken, session = sessionVersion, signal = sessionSignal, fetcher = (...args) => fetch(...args) }) {
   const base = `/drives/${encode(driveId)}`;
   async function request(path, options = {}, expected = session()) {
     const check = () => { if (!expected || session() !== expected) throw new Error('Die Anmeldung wurde geändert. Bitte das Brett neu öffnen.'); };
@@ -29,6 +29,7 @@ export function createBoardClient({ driveId, token = accessToken, session = sess
       check();
       if (res.status === 401 && attempt === 0) continue;
       if (res.status === 404 && options.missing) return null;
+      if (res.status === 403 && options.optionalAccess) return null;
       if (res.status === 403) throw new Error('Dieses Konto hat keinen passenden Zugriff auf den Wünsche-Ordner. Der Besitzer muss diesen separaten Ordner in OneDrive freigeben: zum Lesen oder zum Bearbeiten für Beiträge.');
       if (!res.ok) throw new Error(res.status === 401 ? 'Bitte erneut bei Microsoft anmelden.' : `OneDrive antwortet mit Fehler ${res.status}. Bitte später erneut versuchen.`);
       if (res.status === 204) return null;
@@ -54,8 +55,10 @@ export function createBoardClient({ driveId, token = accessToken, session = sess
     async open() {
       const expected = session();
       const me = await request('/me?$select=id,displayName', {}, expected);
-      const ownDrive = await request('/me/drive?$select=id', { missing: true }, expected);
-      const folder = await request(`${base}/root:/${BOARD_NAME}?$select=id,folder`, { missing: true }, expected);
+      const address = itemId ? `${base}/items/${encode(itemId)}` : `${base}/root:/${BOARD_NAME}`;
+      const folder = await request(`${address}?$select=id,folder`, { missing: true }, expected);
+      // Ein Empfänger braucht nur den geteilten Ordner, kein eigenes provisioniertes OneDrive.
+      const ownDrive = await request('/me/drive?$select=id', { missing: true, optionalAccess: true }, expected);
       if (folder && !folder.folder) throw new Error('Am vorgesehenen Ort liegt eine Datei statt eines Ordners.');
       return { me, folder, owner: String(ownDrive?.id).toLowerCase() === String(driveId).toLowerCase() };
     },
@@ -107,7 +110,7 @@ export function createBoardClient({ driveId, token = accessToken, session = sess
   };
 }
 
-export const board = createBoardClient({ driveId: CONFIG.board.driveId });
+export const board = createBoardClient(CONFIG.board);
 
 export function setBoardNotifications(value) {
   try {

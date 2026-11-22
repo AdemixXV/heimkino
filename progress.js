@@ -1,5 +1,5 @@
 // Gemeinsame Sehposition für die Handy-Fassungen eines Films/einer Folge.
-import * as store from './store.js?v=d94fdd8440';
+import * as store from './store.js?v=4dc25edf96';
 
 export const { isFinished, isResumable } = store;
 const QUALITY = 'heimkino-handy:v1:quality';

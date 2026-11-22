@@ -10,5 +10,5 @@ export const CONFIG = {
   folders: [{ driveId: 'A77EB828D51F3C89', itemId: 'A77EB828D51F3C89!sc9a46288a9f24f479216629c96a78728', path: 'Filme/Handy', label: 'Filme' }],
   // Ein gemeinsames Wünsche-Brett im ausdrücklich gewählten eigenen Konto.
   // Bleibt beim Kontowechsel derselbe Ordner; OneDrive prüft dessen Freigabe.
-  board: { driveId: 'f23e81c0222b88b4' },
+  board: { driveId: 'f23e81c0222b88b4', itemId: 'F23E81C0222B88B4!s34785cf3a2f441059b1df8099fb4934a' },
 };
