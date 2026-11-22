@@ -2,13 +2,13 @@
 // Detailseite mit Beschreibung, IMDb-Bewertung, FSK, Trailer, Besetzung und ähnlichen Filmen, Suche mit
 // Genres, Abspielen mit Weiterschauen. Alles kommt direkt aus OneDrive, die Filmdaten aus
 // "heimkino-katalog.json" (erzeugt auf dem Laptop von scripts/film-infos.js).
-import { AuthError, canSilentLogin, completeLogin, hasSession, isConfigured, login, logout, onSessionChange } from './auth.js?v=4dc25edf96';
-import { announce, h } from './dom.js?v=4dc25edf96';
-import { NBSP, formatBytes, formatDuration, initialOf, resolutionLabel } from './format.js?v=4dc25edf96';
-import { LibraryAccessDenied, SignInNeeded, demo, oneDrive } from './sources.js?v=4dc25edf96';
-import { allProgress, clearProgress, configureProgress, getProgress, isFinished, isResumable, rememberQuality, saveProgress, watchedItems } from './progress.js?v=4dc25edf96';
-import { configureTitleAliases, hideContinue, isHidden, isSaved, restoreContinue, savedKeys, seenOverride, setSeen, toggleSaved } from './library-state.js?v=4dc25edf96';
-import { mountBoard } from './board-view.js?v=4dc25edf96';
+import { AuthError, canSilentLogin, completeLogin, hasSession, isConfigured, login, logout, onSessionChange } from './auth.js?v=5ad2108893';
+import { announce, h } from './dom.js?v=5ad2108893';
+import { NBSP, formatBytes, formatDuration, initialOf, resolutionLabel } from './format.js?v=5ad2108893';
+import { LibraryAccessDenied, SignInNeeded, demo, oneDrive } from './sources.js?v=5ad2108893';
+import { allProgress, clearProgress, configureProgress, getProgress, isFinished, isResumable, rememberQuality, saveProgress, watchedItems } from './progress.js?v=5ad2108893';
+import { configureTitleAliases, hideContinue, isHidden, isSaved, restoreContinue, savedKeys, seenOverride, setSeen, toggleSaved } from './library-state.js?v=5ad2108893';
+import { mountBoard } from './board-view.js?v=5ad2108893';
 
 const view = document.getElementById('view');
 const tabLinks = [...document.querySelectorAll('.tabs__link')];
@@ -24,6 +24,7 @@ if (intro) {
 
 const MODE_KEY = 'heimkino-handy:v1:mode';
 const CACHE_KEY = 'heimkino-handy:v4:library';
+const WEB_VERSION = '5ad2108893';
 const collator = new Intl.Collator('de', { numeric: true, sensitivity: 'base' });
 
 const state = {
@@ -625,6 +626,18 @@ function renderSearch() {
 
 // ---------- Profil ----------
 
+function versionFooter() {
+  const native = window.heimkinoAppUpdates;
+  const messages = { idle: 'Updates werden beim Öffnen automatisch geprüft.', checking: 'Suche nach App-Updates …', current: 'Die App ist aktuell.', downloading: 'Neue App-Version wird heruntergeladen …', ready: `Version ${native?.latestVersion ?? ''} ist bereit. Android fragt vor der Installation nach deiner Bestätigung.`, error: 'Updateprüfung gerade nicht möglich. Bitte später erneut versuchen.' };
+  return h('footer', { class: 'profile__version' },
+    native?.version && h('p', { text: `App-Version ${native.version}` }),
+    h('p', { text: `Web-Version ${WEB_VERSION.startsWith('__') ? 'Entwicklung' : WEB_VERSION}` }),
+    native && h('p', { role: 'status', text: messages[native.status] ?? messages.idle }),
+    native && h('div', { class: 'actions' },
+      native.status === 'ready' && button('Update installieren', () => native.install()),
+      button('Nach Updates suchen', () => native.check(), 'btn--quiet')));
+}
+
 function renderProfile() {
   document.title = 'Profil | Heimkino';
   const lib = state.library;
@@ -655,6 +668,7 @@ function renderProfile() {
       ),
       h('div', { class: 'actions' }, refreshButton, !isDemo && button('Konto wechseln', switchAccount, 'btn--quiet'), isDemo ? button('Demo beenden', endDemo, 'btn--quiet') : button('Abmelden', signOut, 'btn--quiet')),
       hasMeta && h('p', { class: 'credit', text: 'Diese App nutzt die TMDB-API, ist aber nicht von TMDB unterstützt oder zertifiziert.' }),
+      versionFooter(),
     ),
   );
 }
@@ -1277,6 +1291,10 @@ function endDemo() {
 }
 
 // ---------- Ablauf ----------
+
+window.addEventListener('heimkino-update-state', () => {
+  if (state.route.name === 'profile' && !document.body.hasAttribute('data-locked')) renderProfile();
+});
 
 function render() {
   state.teardown?.();

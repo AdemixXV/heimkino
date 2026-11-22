@@ -3,7 +3,7 @@
  * Baut auf style.css auf (Grundgerüst, Abstände, Zustände) und ersetzt dessen Farben und Schriften.
  * Schriften: nur was auf den Geräten schon da ist (schmale Grotesk für Überschriften, Schreibschrift fürs
  * Leuchtschild), es wird nichts nachgeladen. Poster behalten ihre eigenen Farben. */
-@import url("./style.css?v=4dc25edf96");
+@import url("./style.css?v=5ad2108893");
 
 :root {
   color-scheme: dark;
@@ -97,7 +97,7 @@ h1, h2, h3 { font-stretch: var(--display-stretch); }
   position: relative;
   display: block;
   border: var(--frame-w) solid var(--gold-mid);
-  border-image: url("./frame.svg?v=4dc25edf96") 32 / var(--frame-w) round;
+  border-image: url("./frame.svg?v=5ad2108893") 32 / var(--frame-w) round;
   background: var(--velvet-lo);
   box-shadow: 0 var(--space-xs) var(--space-lg) calc(-1 * var(--space-2xs)) var(--shadow-deep);
 }
@@ -436,6 +436,8 @@ h1, h2, h3 { font-stretch: var(--display-stretch); }
 .card-save[aria-pressed="true"] { color: var(--gold-hi); }
 .seen-label { color: var(--gold); font-size: var(--text-sm); }
 .board { max-width: 48rem; }
+.profile__version { margin-top: var(--space-xl); padding-top: var(--space-lg); border-top: 1px solid var(--gold-dim, #86622c); color: var(--gold, #e2c077); font-size: var(--text-sm); }
+.profile__version p { margin-block: var(--space-sm); overflow-wrap: anywhere; }
 .board__form { display: grid; gap: var(--space-sm); margin-block: var(--space-xl); }
 .board__form input, .board__form textarea { width: 100%; min-width: 0; border: 1px solid var(--gold); border-radius: 6px; padding: var(--space-sm); background: var(--ink, #160705); color: var(--cream, #f3e5c4); font: inherit; font-size: 1rem; }
 .board__posts { list-style: none; padding: 0; display: grid; gap: var(--space-md); }

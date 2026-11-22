@@ -1,6 +1,6 @@
-import { h, announce } from './dom.js?v=4dc25edf96';
-import { canWriteBoard, login, sessionVersion } from './auth.js?v=4dc25edf96';
-import { board, BOARD_NAME, NOTIFY_KEY, setBoardNotifications } from './board.js?v=4dc25edf96';
+import { h, announce } from './dom.js?v=5ad2108893';
+import { canWriteBoard, login, sessionVersion } from './auth.js?v=5ad2108893';
+import { board, BOARD_NAME, NOTIFY_KEY, setBoardNotifications } from './board.js?v=5ad2108893';
 
 const btn = (text, onclick, quiet = false) => h('button', { type: 'button', class: `btn${quiet ? ' btn--quiet' : ''}`, text, onclick });
 const sameId = (a, b) => Boolean(a && b && a.toLowerCase() === b.toLowerCase());
