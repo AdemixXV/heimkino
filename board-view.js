@@ -1,6 +1,6 @@
-import { h, announce } from './dom.js?v=1c4067d8b2';
-import { canWriteBoard, login, sessionVersion } from './auth.js?v=1c4067d8b2';
-import { board, BOARD_NAME, NOTIFY_KEY, setBoardNotifications } from './board.js?v=1c4067d8b2';
+import { h, announce } from './dom.js?v=b1e234ccc2';
+import { canWriteBoard, login, sessionVersion } from './auth.js?v=b1e234ccc2';
+import { board, BOARD_NAME, NOTIFY_KEY, setBoardNotifications } from './board.js?v=b1e234ccc2';
 
 const btn = (text, onclick, quiet = false) => h('button', { type: 'button', class: `btn${quiet ? ' btn--quiet' : ''}`, text, onclick });
 const sameId = (a, b) => Boolean(a && b && a.toLowerCase() === b.toLowerCase());
@@ -84,7 +84,7 @@ export function mountBoard({ isDemo = false, isCurrent = () => true } = {}) {
           if (!await writeAccess()) return;
           await board.remove(info.folder.id, post.id); await load();
         }), true)))) : h('p', { text: 'Noch keine Filmwünsche. Schreibe den ersten!' }),
-      info.owner && h('p', { class: 'help', text: `Gemeinsamer Ordner: OneDrive → ${BOARD_NAME}. Weitere Konten benötigen dort Bearbeitungszugriff zum Schreiben. Die Filmfreigabe wird dadurch nicht geändert.` }));
+      ...(info.owner ? [h('p', { class: 'help', text: `Gemeinsamer Ordner: OneDrive → ${BOARD_NAME}. Weitere Konten benötigen dort Bearbeitungszugriff zum Schreiben. Die Filmfreigabe wird dadurch nicht geändert.` })] : []));
   }
   async function load() {
     if (!current()) return;

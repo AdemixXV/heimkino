@@ -2,13 +2,13 @@
 // Detailseite mit Beschreibung, IMDb-Bewertung, FSK, Trailer, Besetzung und ähnlichen Filmen, Suche mit
 // Genres, Abspielen mit Weiterschauen. Alles kommt direkt aus OneDrive, die Filmdaten aus
 // "heimkino-katalog.json" (erzeugt auf dem Laptop von scripts/film-infos.js).
-import { AuthError, canSilentLogin, completeLogin, hasSession, isConfigured, login, logout, onSessionChange } from './auth.js?v=1c4067d8b2';
-import { announce, h } from './dom.js?v=1c4067d8b2';
-import { NBSP, formatBytes, formatDuration, initialOf, resolutionLabel } from './format.js?v=1c4067d8b2';
-import { LibraryAccessDenied, SignInNeeded, demo, oneDrive } from './sources.js?v=1c4067d8b2';
-import { allProgress, clearProgress, configureProgress, getProgress, isFinished, isResumable, rememberQuality, saveProgress, watchedItems } from './progress.js?v=1c4067d8b2';
-import { configureTitleAliases, hideContinue, isHidden, isSaved, restoreContinue, savedKeys, seenOverride, setSeen, toggleSaved } from './library-state.js?v=1c4067d8b2';
-import { mountBoard } from './board-view.js?v=1c4067d8b2';
+import { AuthError, canSilentLogin, completeLogin, hasSession, isConfigured, login, logout, onSessionChange } from './auth.js?v=b1e234ccc2';
+import { announce, h } from './dom.js?v=b1e234ccc2';
+import { NBSP, formatBytes, formatDuration, initialOf, resolutionLabel } from './format.js?v=b1e234ccc2';
+import { LibraryAccessDenied, SignInNeeded, demo, oneDrive } from './sources.js?v=b1e234ccc2';
+import { allProgress, clearProgress, configureProgress, getProgress, isFinished, isResumable, rememberQuality, saveProgress, watchedItems } from './progress.js?v=b1e234ccc2';
+import { configureTitleAliases, hideContinue, isHidden, isSaved, restoreContinue, savedKeys, seenOverride, setSeen, toggleSaved } from './library-state.js?v=b1e234ccc2';
+import { mountBoard } from './board-view.js?v=b1e234ccc2';
 
 const view = document.getElementById('view');
 const tabLinks = [...document.querySelectorAll('.tabs__link')];
@@ -24,7 +24,7 @@ if (intro) {
 
 const MODE_KEY = 'heimkino-handy:v1:mode';
 const CACHE_KEY = 'heimkino-handy:v4:library';
-const WEB_VERSION = '1c4067d8b2';
+const WEB_VERSION = 'b1e234ccc2';
 const collator = new Intl.Collator('de', { numeric: true, sensitivity: 'base' });
 
 const state = {

@@ -1,5 +1,5 @@
-import { accessToken, sessionSignal, sessionVersion } from './auth.js?v=1c4067d8b2';
-import { CONFIG } from './config.js?v=1c4067d8b2';
+import { accessToken, sessionSignal, sessionVersion } from './auth.js?v=b1e234ccc2';
+import { CONFIG } from './config.js?v=b1e234ccc2';
 
 const GRAPH = 'https://graph.microsoft.com/v1.0';
 export const BOARD_NAME = 'Heimkino-Wuensche';
